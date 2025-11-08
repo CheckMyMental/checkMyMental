@@ -39,6 +39,7 @@ if user_input:
         st.markdown(user_input)
     
     # AI 응답 생성 및 표시
+    # process_user_input 내부에서 이미 시스템 태그가 제거된 응답을 반환함
     with st.chat_message("assistant"):
         with st.spinner("답변을 생성하는 중..."):
             response = process_user_input(user_input)

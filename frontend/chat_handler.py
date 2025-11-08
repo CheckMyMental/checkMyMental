@@ -1,7 +1,32 @@
 # 채팅 히스토리 관리 및 메시지 처리 모듈
 import streamlit as st
+import re
 from .gemini_api import ask_gemini, ask_gemini_with_stage
 from .stage_handler import StageHandler
+
+
+def remove_system_tags(response: str) -> str:
+    """
+    시스템 내부 처리용 태그를 제거하여 사용자에게 표시할 내용만 반환
+    - Summary String:
+    - Hypothesis String:
+    - Validated String:
+    - Final Response String:
+    """
+    # 각 태그 패턴을 찾아서 태그와 콜론만 제거 (내용은 유지)
+    patterns = [
+        r'Summary String:\s*',
+        r'Hypothesis String:\s*',
+        r'Validated String:\s*',
+        r'Final Response String:\s*',
+    ]
+    
+    cleaned = response
+    for pattern in patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+    
+    # 앞뒤 공백 제거
+    return cleaned.strip()
 
 
 def init_chat_history():
@@ -90,17 +115,19 @@ def process_user_input(user_input):
         previous_stage_data=previous_stage_data
     )
     
-    # AI 응답 추가
-    add_assistant_message(response)
+    # 시스템 태그 제거 후 AI 응답 추가
+    cleaned_response = remove_system_tags(response)
+    add_assistant_message(cleaned_response)
     
     # 자동 단계 전환 체크 (예: Stage 1에서 JSON 출력 시)
+    # 원본 response를 사용하여 태그 확인 (cleaned_response가 아닌)
     if stage_handler.should_transition(response):
         stage_handler.move_to_next_stage()
         # 단계 전환 알림 메시지 추가 (선택적)
         transition_msg = f"[시스템] Stage {current_stage} 완료. Stage {current_stage + 1}로 진행합니다."
         add_assistant_message(transition_msg)
     
-    return response
+    return cleaned_response
 
 
 def get_current_stage_info():

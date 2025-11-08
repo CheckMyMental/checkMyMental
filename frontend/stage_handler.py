@@ -50,6 +50,9 @@ class StageHandler:
             st.session_state.current_stage = 1
         if "stage_data" not in st.session_state:
             st.session_state.stage_data = {}
+        # Stage 1 대화 턴 수 추적 (질문-응답 쌍)
+        if "stage1_turn_count" not in st.session_state:
+            st.session_state.stage1_turn_count = 0
     
     def get_current_stage(self) -> int:
         """현재 단계 반환"""
@@ -140,6 +143,16 @@ class StageHandler:
         """단계를 처음으로 리셋"""
         st.session_state.current_stage = 1
         st.session_state.stage_data = {}
+        st.session_state.stage1_turn_count = 0
+    
+    def increment_stage1_turn(self):
+        """Stage 1의 대화 턴 수 증가"""
+        if st.session_state.current_stage == 1:
+            st.session_state.stage1_turn_count += 1
+    
+    def get_stage1_turn_count(self) -> int:
+        """Stage 1의 현재 대화 턴 수 반환"""
+        return st.session_state.get("stage1_turn_count", 0)
     
     def save_stage_output(self, stage: int, data: Dict):
         """특정 단계의 출력 데이터를 저장 (다음 단계 입력으로 활용)"""
@@ -149,21 +162,45 @@ class StageHandler:
         """이전 단계의 출력 데이터 가져오기"""
         return st.session_state.stage_data.get(f"stage_{stage}")
     
-    def should_transition(self, response: str) -> bool:
+    def should_transition(self, response: str, conversation_history: list = None) -> bool:
         """
         AI 응답을 분석해서 다음 단계로 넘어갈지 판단
-        - Stage 1: Summary String이 생성되면 다음 단계로
+        - Stage 1: Summary String이 생성되고, 최소 3턴 이상의 대화가 진행되었을 때만 다음 단계로
         - Stage 2: Hypothesis String이 생성되면 다음 단계로 (내부 처리 단계)
         - Stage 3: Validated String이 생성되면 다음 단계로
+        
+        Args:
+            response: AI 응답 텍스트
+            conversation_history: 대화 히스토리 (선택적, Stage 1 검증용)
         """
         current = self.get_current_stage()
         
-        # Stage 1: Summary String이 생성되면 다음 단계로
+        # Stage 1: Summary String이 생성되고, 충분한 정보가 수집되었을 때만 다음 단계로
         if current == 1:
             if "Summary String:" in response:
-                # 요약 리포트를 저장
-                self.save_stage_output(1, {"summary_report": response})
-                return True
+                # 최소 턴 수 확인 (질문-응답 쌍)
+                turn_count = self.get_stage1_turn_count()
+                
+                # 대화 히스토리에서도 확인 (추가 검증)
+                if conversation_history:
+                    # Stage 1에서의 사용자 메시지 수 확인 (질문에 대한 응답)
+                    stage1_user_messages = [
+                        msg for msg in conversation_history 
+                        if msg.get("role") == "user"
+                    ]
+                    user_message_count = len(stage1_user_messages)
+                else:
+                    user_message_count = turn_count
+                
+                # 최소 3턴 이상의 대화가 진행되었는지 확인
+                if turn_count >= 3 or user_message_count >= 3:
+                    print(f"[Stage 1] 충분한 정보 수집 완료 (턴 수: {turn_count}, 사용자 메시지: {user_message_count})")
+                    # 요약 리포트를 저장
+                    self.save_stage_output(1, {"summary_report": response})
+                    return True
+                else:
+                    print(f"[Stage 1] 정보 수집 부족 - 전환 거부 (턴 수: {turn_count}, 사용자 메시지: {user_message_count}, 최소 필요: 3턴)")
+                    return False
         
         # Stage 2: Hypothesis String이 생성되면 다음 단계로 (내부 처리 단계)
         if current == 2:

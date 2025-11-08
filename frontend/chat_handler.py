@@ -106,6 +106,11 @@ def process_user_input(user_input):
     
     print(f"{'*'*80}\n")
     
+    # Stage 1인 경우 턴 수 증가 (사용자 응답이 들어왔으므로)
+    if current_stage == 1:
+        stage_handler.increment_stage1_turn()
+        print(f"[Stage 1] 현재 대화 턴 수: {stage_handler.get_stage1_turn_count()}")
+    
     # 단계별 Gemini API 호출
     response = ask_gemini_with_stage(
         user_input=user_input,
@@ -115,13 +120,24 @@ def process_user_input(user_input):
         previous_stage_data=previous_stage_data
     )
     
+    # 응답 검증
+    if not response or response.strip() == "":
+        print(f"[오류] 빈 응답이 반환되었습니다!")
+        response = "죄송합니다. 응답 생성에 문제가 발생했습니다. 다시 시도해주세요."
+    
+    print(f"[Chat Handler] 원본 응답 길이: {len(response)} 문자")
+    
     # 시스템 태그 제거 후 AI 응답 추가
     cleaned_response = remove_system_tags(response)
+    print(f"[Chat Handler] 태그 제거 후 응답 길이: {len(cleaned_response)} 문자")
+    
     add_assistant_message(cleaned_response)
     
-    # 자동 단계 전환 체크 (예: Stage 1에서 JSON 출력 시)
+    # 자동 단계 전환 체크
     # 원본 response를 사용하여 태그 확인 (cleaned_response가 아닌)
-    if stage_handler.should_transition(response):
+    # conversation_history를 전달하여 Stage 1의 경우 추가 검증 수행
+    current_history = get_conversation_history(exclude_last=False)  # 현재까지의 전체 히스토리
+    if stage_handler.should_transition(response, conversation_history=current_history):
         stage_handler.move_to_next_stage()
         # 단계 전환 알림 메시지 추가 (선택적)
         transition_msg = f"[시스템] Stage {current_stage} 완료. Stage {current_stage + 1}로 진행합니다."

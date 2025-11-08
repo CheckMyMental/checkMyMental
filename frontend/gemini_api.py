@@ -168,12 +168,22 @@ User: {user_input}
 
 Assistant:"""
         
+        # 프롬프트 길이 로그
+        print(f"[Gemini API] 프롬프트 길이: {len(full_prompt)} 문자")
+        print(f"[Gemini API] API 호출 시작...")
+        
         # API 호출
         response = model.generate_content(full_prompt)
+        
+        print(f"[Gemini API] 응답 수신 완료, 길이: {len(response.text)} 문자")
+        print(f"[Gemini API] 응답 미리보기: {response.text[:200]}...")
         
         return response.text
 
     except Exception as e:
+        print(f"[Gemini API] 오류 발생: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"[Gemini API] 상세 에러:\n{traceback.format_exc()}")
         return f"오류가 발생했습니다: {str(e)}"
 
 

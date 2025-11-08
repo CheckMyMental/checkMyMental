@@ -32,3 +32,11 @@ Thumbs.db
 # 로그 및 임시 파일
 *.log
 *.tmp
+*.tmp
+
+#chroma db
+rag/chroma_db/
+*.sqlite3
+
+#DSM-5-TR
+DSM-5-TR.pdf

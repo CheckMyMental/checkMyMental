@@ -1,4 +1,13 @@
+
 streamlit>=1.28.0
 google-generativeai>=0.3.0
 python-dotenv>=1.0.0
 black>=24.0.0 # 코드 포맷팅 도구
+=======
+chromadb
+langchain
+pdfplumber
+python-dotenv
+einops
+uvicorn
+

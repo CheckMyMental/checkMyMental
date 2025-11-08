@@ -126,29 +126,29 @@ class StageHandler:
     def should_transition(self, response: str) -> bool:
         """
         AI 응답을 분석해서 다음 단계로 넘어갈지 판단
-        - Stage 1: 자연어 요약 리포트가 생성되면 다음 단계로
-        - Stage 2: 가설 리포트가 생성되면 다음 단계로 (내부 처리 단계)
-        - Stage 3: 확정 질환명이 나오면 다음 단계로
+        - Stage 1: Summary String이 생성되면 다음 단계로
+        - Stage 2: Hypothesis String이 생성되면 다음 단계로 (내부 처리 단계)
+        - Stage 3: Validated String이 생성되면 다음 단계로
         """
         current = self.get_current_stage()
         
-        # Stage 1: 자연어 요약 리포트가 생성되면 다음 단계로
+        # Stage 1: Summary String이 생성되면 다음 단계로
         if current == 1:
-            if "초기 접수 요약 리포트" in response or "## 초기 접수 요약 리포트" in response:
+            if "Summary String:" in response:
                 # 요약 리포트를 저장
                 self.save_stage_output(1, {"summary_report": response})
                 return True
         
-        # Stage 2: 가설 리포트가 생성되면 다음 단계로 (내부 처리 단계)
+        # Stage 2: Hypothesis String이 생성되면 다음 단계로 (내부 처리 단계)
         if current == 2:
-            if "가설 생성 리포트" in response or "## 가설 생성 리포트" in response:
+            if "Hypothesis String:" in response:
                 # 가설 리포트를 저장
                 self.save_stage_output(2, {"hypothesis_report": response})
                 return True
         
-        # Stage 3: 확정 질환명이 나오면 다음 단계로
+        # Stage 3: Validated String이 생성되면 다음 단계로
         if current == 3:
-            if "확정 질환명" in response or "## 진단 검증 결과" in response:
+            if "Validated String:" in response:
                 # 확정 질환명을 저장
                 self.save_stage_output(3, {"validation_result": response})
                 return True

@@ -12,22 +12,31 @@ class StageHandler:
         1: {
             "name": "intake",
             "prompt_file": "stage1_intake.md",
-            "context_file": "stage_specific/context_stage1_intake.json"
+            "context_files": [
+                "stage_specific/context_stage1_intake.json",
+                "common/diagnostic_guidelines.json"
+            ]
         },
         2: {
             "name": "hypothesis_generation", 
             "prompt_file": "stage2_hypothesis_generation.md",
-            "context_file": "stage_specific/context_stage2_hypothesis_generation.json"
+            "context_files": [
+                "stage_specific/context_stage2_hypothesis_generation.json"
+            ]
         },
         3: {
             "name": "validation",
             "prompt_file": "stage3_validation.md",
-            "context_file": "stage_specific/context_stage3_validation.json"
+            "context_files": [
+                "stage_specific/context_stage3_validation.json"
+            ]
         },
         4: {
             "name": "solution_summary",
             "prompt_file": "stage4_solution_summary.md",
-            "context_file": "stage_specific/context_stage4_solution_summary.json"
+            "context_files": [
+                "stage_specific/context_stage4_solution_summary.json"
+            ]
         }
     }
     
@@ -61,24 +70,41 @@ class StageHandler:
         
         try:
             with open(prompt_file, "r", encoding="utf-8") as f:
-                return f.read()
+                prompt_content = f.read()
+                print(f"\n{'='*80}")
+                print(f"[Stage {stage}] 프롬프트 파일 로드: {self.STAGES[stage]['prompt_file']}")
+                print(f"{'='*80}")
+                print(f"프롬프트 내용 (처음 500자):\n{prompt_content[:500]}...")
+                print(f"{'='*80}\n")
+                return prompt_content
         except Exception as e:
             print(f"프롬프트 로드 오류 (Stage {stage}): {e}")
             return ""
     
     def load_context(self, stage: int) -> Dict:
-        """특정 단계의 context JSON을 로드"""
+        """특정 단계의 context JSON 파일들을 모두 로드하여 통합"""
         if stage not in self.STAGES:
             raise ValueError(f"Invalid stage: {stage}")
         
-        context_file = self.contexts_dir / self.STAGES[stage]["context_file"]
+        context_files = self.STAGES[stage].get("context_files", [])
+        merged_context = {}
         
-        try:
-            with open(context_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Context 로드 오류 (Stage {stage}): {e}")
-            return {}
+        for context_file_path in context_files:
+            context_file = self.contexts_dir / context_file_path
+            
+            try:
+                if context_file.exists():
+                    with open(context_file, "r", encoding="utf-8") as f:
+                        context_data = json.load(f)
+                        # 파일명을 키로 사용하여 통합 (중복 방지)
+                        file_key = context_file_path.replace("/", "_").replace(".json", "")
+                        merged_context[file_key] = context_data
+                else:
+                    print(f"[경고] Context 파일을 찾을 수 없습니다: {context_file_path}")
+            except Exception as e:
+                print(f"Context 로드 오류 (Stage {stage}, 파일: {context_file_path}): {e}")
+        
+        return merged_context
     
     def get_stage_materials(self, stage: Optional[int] = None) -> Tuple[str, Dict]:
         """특정 단계(또는 현재 단계)의 prompt와 context를 함께 반환"""

@@ -10,4 +10,7 @@ pdfplumber
 python-dotenv
 einops
 uvicorn
-
+fastapi
+langchain
+langchain_community
+sentence-transformers

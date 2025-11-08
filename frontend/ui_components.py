@@ -57,6 +57,9 @@ def render_sidebar():
         if "stage_handler" in st.session_state:
             st.session_state.stage_handler.reset_stage()
             st.session_state.messages = []
+            # 가이드라인 메시지도 다시 추가되도록 플래그 초기화
+            if "guideline_added" in st.session_state:
+                del st.session_state.guideline_added
             st.rerun()
 
 

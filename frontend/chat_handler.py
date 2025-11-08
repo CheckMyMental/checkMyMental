@@ -29,6 +29,34 @@ def remove_system_tags(response: str) -> str:
     return cleaned.strip()
 
 
+def get_stage_guideline_message(stage: int) -> str:
+    """단계별 가이드라인을 Assistant 메시지 형식으로 반환"""
+    from .stage_guidelines import STAGE_GUIDELINES
+    
+    guideline = STAGE_GUIDELINES.get(stage)
+    if not guideline:
+        return ""
+    
+    # 할 일 목록 생성 (마크다운 리스트 형식으로, 각 항목 사이에 빈 줄 추가)
+    what_to_do_list = "\n".join([f"- {item}" for item in guideline['what_to_do']])
+    tips_list = "\n".join([f"- {item}" for item in guideline['tips']])
+    
+    # Assistant 메시지 형식으로 포맷팅 (각 섹션 사이에 빈 줄 추가)
+    message = f"""**{guideline['title']}**
+
+{guideline['description']}
+
+**이 단계에서 할 일:**
+
+{what_to_do_list}
+
+**💡 유의사항:**
+
+{tips_list}
+"""
+    return message
+
+
 def init_chat_history():
     # 채팅 히스토리 초기화
     if "messages" not in st.session_state:
@@ -37,6 +65,17 @@ def init_chat_history():
     # StageHandler 초기화
     if "stage_handler" not in st.session_state:
         st.session_state.stage_handler = StageHandler()
+    
+    # 초기 가이드라인 메시지 추가 (첫 실행 시에만)
+    if "guideline_added" not in st.session_state:
+        current_stage = st.session_state.stage_handler.get_current_stage()
+        guideline_message = get_stage_guideline_message(current_stage)
+        if guideline_message:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": guideline_message
+            })
+            st.session_state.guideline_added = True
 
 
 def add_user_message(content):
@@ -139,9 +178,12 @@ def process_user_input(user_input):
     current_history = get_conversation_history(exclude_last=False)  # 현재까지의 전체 히스토리
     if stage_handler.should_transition(response, conversation_history=current_history):
         stage_handler.move_to_next_stage()
-        # 단계 전환 알림 메시지 추가 (선택적)
-        transition_msg = f"[시스템] Stage {current_stage} 완료. Stage {current_stage + 1}로 진행합니다."
-        add_assistant_message(transition_msg)
+        
+        # 다음 단계의 가이드라인 메시지 추가
+        next_stage = stage_handler.get_current_stage()
+        guideline_message = get_stage_guideline_message(next_stage)
+        if guideline_message:
+            add_assistant_message(guideline_message)
     
     return cleaned_response
 

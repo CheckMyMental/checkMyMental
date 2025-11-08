@@ -2,16 +2,15 @@
 AI 상담 프로토타입 메인 애플리케이션
 """
 import streamlit as st
-from config import check_api_key
-from ui_components import (
+from frontend.config import check_api_key
+from frontend.ui_components import (
     setup_page_config,
     render_sidebar,
     render_main_header,
     render_chat_messages,
     render_user_input,
-    render_assistant_response,
 )
-from chat_handler import init_chat_history, process_user_input
+from frontend.chat_handler import init_chat_history, process_user_input
 
 # API 키 확인
 check_api_key()

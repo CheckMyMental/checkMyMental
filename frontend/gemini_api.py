@@ -3,7 +3,7 @@ import google.generativeai as genai  # 제미나이 모델을 python에서 쓸 �
 from dotenv import (
     load_dotenv,
 )  # 파일 안에 적힌 환경 변수들을 프로그램 실행 시 자동으로 불러오는 역할
-from context_handler import get_context
+from .context_handler import get_context
 
 # 환경 변수 로드
 load_dotenv()

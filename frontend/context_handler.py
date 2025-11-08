@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 
 
-# Context 파일들이 저장될 디렉토리
-CONTEXT_DIR = Path(__file__).parent / "contexts"
+# Context 파일들이 저장될 디렉토리 (상위 폴더의 contexts)
+CONTEXT_DIR = Path(__file__).parent.parent / "contexts"
 
 
 # 지정된 이름의 파일(.txt나 .md)에서 context를 읽어서 문자열로 반환

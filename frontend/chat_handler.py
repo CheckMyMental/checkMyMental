@@ -1,6 +1,6 @@
 # 채팅 히스토리 관리 및 메시지 처리 모듈
 import streamlit as st
-from gemini_api import ask_gemini
+from .gemini_api import ask_gemini
 
 
 def init_chat_history():

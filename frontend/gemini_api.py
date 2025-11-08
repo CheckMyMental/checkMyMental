@@ -1,4 +1,5 @@
 import os  # 운영체제 다루는 기본 모듈 , .env파일 불러올때 사용함
+import json
 import google.generativeai as genai  # 제미나이 모델을 python에서 쓸 수 있게 해주는 공식 SDK
 from dotenv import (
     load_dotenv,
@@ -73,10 +74,85 @@ def ask_gemini(
             현재 사용자 질문: {user_input}
             """
 
-        prompt = "영어로 Kosaraju 알고리즘에 대해 알려줘."
         # API 호출
         response = model.generate_content(prompt)
 
+        return response.text
+
+    except Exception as e:
+        return f"오류가 발생했습니다: {str(e)}"
+
+
+#========================================================================================================
+# ask_gemini_with_stage()함수 정의 / 단계별 프롬프트와 컨텍스트를 사용하여 Gemini API 호출
+# 단계별 상담 프로세스에서 사용하는 함수
+
+# Args:
+#     user_input: 사용자 입력 메시지
+#     prompt_template: 단계별 프롬프트 템플릿 (마크다운)
+#     context_data: 단계별 context JSON 데이터
+#     conversation_history: 대화 히스토리 리스트
+#     previous_stage_data: 이전 단계의 출력 데이터 (선택적)
+
+# Returns:
+#     Gemini의 응답 텍스트
+#========================================================================================================
+
+def ask_gemini_with_stage(
+    user_input: str,
+    prompt_template: str,
+    context_data: dict,
+    conversation_history: list = None,
+    previous_stage_data: dict = None
+) -> str:
+    """
+    단계별 프롬프트와 컨텍스트를 사용하여 Gemini API 호출
+    
+    Args:
+        user_input: 사용자 입력
+        prompt_template: 단계별 프롬프트 템플릿 (마크다운)
+        context_data: 단계별 context JSON 데이터
+        conversation_history: 대화 히스토리
+        previous_stage_data: 이전 단계의 출력 데이터 (다음 단계 입력으로 활용)
+    """
+    try:
+        # 모델 초기화
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        
+        # Context를 문자열로 변환
+        context_str = json.dumps(context_data, ensure_ascii=False, indent=2)
+        
+        # 대화 히스토리 포함
+        history_text = ""
+        if conversation_history:
+            history_text = "\n".join([
+                f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+                for msg in conversation_history[-10:]  # 최근 10개 포함
+            ])
+        
+        # 이전 단계 데이터 포함
+        previous_data_str = ""
+        if previous_stage_data:
+            previous_data_str = f"\n## Previous Stage Output\n{json.dumps(previous_stage_data, ensure_ascii=False, indent=2)}"
+        
+        # 최종 프롬프트 조합
+        full_prompt = f"""{prompt_template}
+
+## Context Data
+{context_str}
+{previous_data_str}
+
+## Conversation History
+{history_text}
+
+## Current User Input
+User: {user_input}
+
+Assistant:"""
+        
+        # API 호출
+        response = model.generate_content(full_prompt)
+        
         return response.text
 
     except Exception as e:

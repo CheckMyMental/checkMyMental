@@ -1,0 +1,29 @@
+{
+  "stage": 4,
+  "name": "solution_summary",
+  "description": "솔루션 및 요약 단계 - 맞춤형 솔루션 검색 및 최종 요약 제공",
+  "objectives": [
+    "확정 질환명 기반 RAG 솔루션 검색",
+    "전체 상담 과정 종합 요약",
+    "실행 가능한 구체적 행동 계획 제시"
+  ],
+  "rag_search": {
+    "input": "Stage 3에서 확정된 단일 질환명",
+    "output": "맞춤형 솔루션 정보",
+    "search_strategy": "질환명 기반 치료/개입 방안 검색"
+  },
+  "solution_structure": {
+    "immediate_actions": "즉시 실행 가능한 조치",
+    "short_term_goals": "단기 목표 (1-2주)",
+    "long_term_goals": "중장기 목표 (1-3개월)",
+    "professional_recommendations": "전문가 상담 권장사항",
+    "additional_resources": "추가 자원 및 도움말"
+  },
+  "summary_components": [
+    "Stage 1 요약 리포트의 핵심 내용",
+    "확정 진단 및 진단 근거",
+    "맞춤형 솔루션 및 행동 계획",
+    "다음 단계 안내"
+  ]
+}
+

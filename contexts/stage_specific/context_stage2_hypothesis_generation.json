@@ -1,0 +1,29 @@
+{
+  "stage": 2,
+  "name": "hypothesis_generation",
+  "description": "가설 생성 단계 - RAG를 이용한 Top 3 질환 검색 및 가설 리포트 생성",
+  "objectives": [
+    "Stage 1 요약 리포트를 바탕으로 RAG 검색 수행",
+    "Top 3 관련 질환 선정",
+    "각 질환의 핵심 진단 기준 요약",
+    "다음 단계를 위한 가설 리포트 생성"
+  ],
+  "rag_search": {
+    "input": "Stage 1의 자연어 요약 리포트",
+    "output": "Top 3 관련 질환 및 진단 기준",
+    "search_strategy": "증상 키워드 기반 질환 검색"
+  },
+  "hypothesis_structure": {
+    "top_3_disorders": [
+      {
+        "disorder_name": "질환명",
+        "diagnostic_criteria": "핵심 진단 기준 요약",
+        "match_score": "Stage 1 정보와의 일치도",
+        "matching_symptoms": "매칭되는 증상들"
+      }
+    ],
+    "differential_questions": "Top 3 질환을 감별하기 위한 핵심 선택형 질문 후보들"
+  },
+  "notes": "이 단계는 내부 처리 단계로, 사용자와의 직접적인 대화 없이 진행됩니다."
+}
+

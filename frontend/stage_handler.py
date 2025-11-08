@@ -195,8 +195,7 @@ class StageHandler:
                 # 최소 3턴 이상의 대화가 진행되었는지 확인
                 if turn_count >= 3 or user_message_count >= 3:
                     print(f"[Stage 1] 충분한 정보 수집 완료 (턴 수: {turn_count}, 사용자 메시지: {user_message_count})")
-                    # 요약 리포트를 저장
-                    self.save_stage_output(1, {"summary_report": response})
+                    # 요약 리포트 저장은 chat_handler에서 처리
                     return True
                 else:
                     print(f"[Stage 1] 정보 수집 부족 - 전환 거부 (턴 수: {turn_count}, 사용자 메시지: {user_message_count}, 최소 필요: 3턴)")
@@ -205,15 +204,13 @@ class StageHandler:
         # Stage 2: Hypothesis String이 생성되면 다음 단계로 (내부 처리 단계)
         if current == 2:
             if "Hypothesis String:" in response:
-                # 가설 리포트를 저장
-                self.save_stage_output(2, {"hypothesis_report": response})
+                # 가설 리포트 저장은 chat_handler에서 처리
                 return True
         
         # Stage 3: Validated String이 생성되면 다음 단계로
         if current == 3:
             if "Validated String:" in response:
-                # 확정 질환명을 저장
-                self.save_stage_output(3, {"validation_result": response})
+                # 확정 질환명 저장은 chat_handler에서 처리
                 return True
         
         return False

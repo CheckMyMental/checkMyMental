@@ -5,13 +5,42 @@ from .gemini_api import ask_gemini, ask_gemini_with_stage
 from .stage_handler import StageHandler
 
 
+def parse_ai_response(response: str) -> tuple:
+    """
+    AI 응답을 사용자 표시 부분과 내부 데이터로 분리
+    
+    응답 형식:
+    [사용자에게 보여질 응답]
+    
+    ---INTERNAL_DATA---
+    Summary String:
+    [다음 단계로 전달될 구조화된 데이터]
+    
+    Returns:
+        (user_message, internal_data)
+        - user_message: 사용자에게 표시할 메시지
+        - internal_data: 다음 단계로 전달할 내부 데이터 (Summary String 등)
+    """
+    # ---INTERNAL_DATA--- 구분자로 분리
+    if "---INTERNAL_DATA---" in response:
+        parts = response.split("---INTERNAL_DATA---")
+        user_message = parts[0].strip()
+        internal_data = parts[1].strip() if len(parts) > 1 else ""
+        
+        print(f"[응답 파싱] 사용자 메시지: {len(user_message)} 문자")
+        print(f"[응답 파싱] 내부 데이터: {len(internal_data)} 문자")
+        
+        return user_message, internal_data
+    
+    # 구분자가 없으면 전체를 사용자 메시지로 처리
+    # (Summary String 등이 없는 일반 대화 응답)
+    return response.strip(), ""
+
+
 def remove_system_tags(response: str) -> str:
     """
     시스템 내부 처리용 태그를 제거하여 사용자에게 표시할 내용만 반환
-    - Summary String:
-    - Hypothesis String:
-    - Validated String:
-    - Final Response String:
+    (레거시 함수 - parse_ai_response 사용 권장)
     """
     # 각 태그 패턴을 찾아서 태그와 콜론만 제거 (내용은 유지)
     patterns = [
@@ -179,32 +208,54 @@ def process_user_input(user_input):
     
     print(f"[Chat Handler] 원본 응답 길이: {len(response)} 문자")
     
-    # 시스템 태그 제거 후 AI 응답 추가
-    cleaned_response = remove_system_tags(response)
-    print(f"[Chat Handler] 태그 제거 후 응답 길이: {len(cleaned_response)} 문자")
+    # 응답을 사용자 메시지와 내부 데이터로 분리
+    user_message, internal_data = parse_ai_response(response)
     
-    add_assistant_message(cleaned_response)
+    # 사용자에게 표시할 메시지가 있으면 추가
+    if user_message:
+        add_assistant_message(user_message)
+        print(f"[Chat Handler] 사용자에게 표시: {len(user_message)} 문자")
+    else:
+        print(f"[Chat Handler] 사용자에게 표시할 메시지 없음 (내부 처리 단계)")
+    
+    # 단계 전환 체크는 내부 데이터 또는 전체 응답 사용
+    transition_data = internal_data if internal_data else response
     
     # 자동 단계 전환 체크
-    # 원본 response를 사용하여 태그 확인 (cleaned_response가 아닌)
-    # conversation_history를 전달하여 Stage 1의 경우 추가 검증 수행
-    current_history = get_conversation_history(exclude_last=False)  # 현재까지의 전체 히스토리
-    if stage_handler.should_transition(response, conversation_history=current_history):
+    current_history = get_conversation_history(exclude_last=False)
+    if stage_handler.should_transition(transition_data, conversation_history=current_history):
+        print(f"[Chat Handler] 단계 전환 조건 충족 - 내부 데이터 저장 중")
+        
+        # 내부 데이터를 stage_output에 저장 (다음 단계 입력으로 사용)
+        if "Summary String:" in transition_data:
+            stage_handler.save_stage_output(current_stage, {
+                "summary_report": transition_data,
+                "user_visible_message": user_message
+            })
+        elif "Hypothesis String:" in transition_data:
+            stage_handler.save_stage_output(current_stage, {
+                "hypothesis_report": transition_data
+            })
+        elif "Validated String:" in transition_data:
+            stage_handler.save_stage_output(current_stage, {
+                "validation_result": transition_data,
+                "user_visible_message": user_message
+            })
+        
         stage_handler.move_to_next_stage()
         
         # 다음 단계의 가이드라인 메시지 추가
         next_stage = stage_handler.get_current_stage()
         guideline_message = get_stage_guideline_message(next_stage)
         if guideline_message:
-            # 가이드라인 메시지로 표시하기 위해 플래그 추가
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": guideline_message,
-                "is_guideline": True,  # 가이드라인 메시지 플래그
-                "stage": next_stage  # 단계 정보 저장
+                "is_guideline": True,
+                "stage": next_stage
             })
     
-    return cleaned_response
+    return user_message if user_message else "분석 중입니다..."
 
 
 def get_current_stage_info():

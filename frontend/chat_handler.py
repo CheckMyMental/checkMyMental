@@ -1,6 +1,7 @@
 # 채팅 히스토리 관리 및 메시지 처리 모듈
 import streamlit as st
 import re
+import difflib
 from .gemini_api import ask_gemini, ask_gemini_with_stage
 from .stage_handler import StageHandler
 
@@ -56,6 +57,86 @@ def remove_system_tags(response: str) -> str:
     
     # 앞뒤 공백 제거
     return cleaned.strip()
+
+
+def _extract_top_diagnosis_candidates(hypothesis_report: str) -> list:
+    """
+    Stage 2의 'Hypothesis String' 포맷에서 Top N 후보 질환명을 추출
+    예상 포맷 (예시):
+      1. [질환명 1] (확률: ...):
+      2. [질환명 2] (확률: ...):
+      3. [질환명 3] (확률: ...):
+    """
+    if not hypothesis_report:
+        return []
+    
+    # "Hypothesis String:" 이후의 본문만 대상으로 처리 (있으면)
+    if "Hypothesis String:" in hypothesis_report:
+        hypothesis_report = hypothesis_report.split("Hypothesis String:", 1)[1]
+    
+    # 줄 단위로 후보 라인을 탐색: "1. 질환명 (" 또는 "1. 질환명 :" 형태
+    pattern = re.compile(r'^\s*\d+\.\s*([^\(:\n]+?)\s*(?:\(|:)', flags=re.MULTILINE)
+    candidates = pattern.findall(hypothesis_report)
+    
+    # 후처리: 좌우 공백 제거
+    candidates = [c.strip() for c in candidates if c and c.strip()]
+    return candidates
+
+
+def _normalize_validated_to_candidates(validated_text: str, candidates: list) -> str:
+    """
+    Validated String 텍스트에서 선택된 질환명을 추출한 뒤,
+    Stage 2 후보 리스트 중 '정확히 동일한 문자열'로 정규화하여 반환.
+    - 대소문자/공백 차이는 허용하여 매칭하되, 반환은 원본 후보 문자열 그대로 사용
+    - 필요 시 유사도(difflib)로 근접 후보를 선택 (cutoff=0.6)
+    """
+    if not validated_text:
+        return ""
+    
+    # "Validated String:" 이후 내용을 추출
+    chosen = validated_text
+    if "Validated String:" in validated_text:
+        parts = validated_text.split("Validated String:", 1)
+        chosen = parts[1] if len(parts) > 1 else validated_text
+    
+    # 첫 번째 비어있지 않은 라인만 채택
+    chosen_line = ""
+    for line in chosen.splitlines():
+        stripped = line.strip()
+        if stripped:
+            chosen_line = stripped
+            break
+    
+    # 감싸는 따옴표/대괄호 제거
+    chosen_line = chosen_line.strip().strip("[]\"'“”‘’()").strip()
+    if not candidates:
+        return chosen_line
+    
+    # 1) 완전 일치 우선
+    for cand in candidates:
+        if chosen_line == cand:
+            return cand
+    
+    # 2) 대소문자/공백 무시 일치
+    def canon(s: str) -> str:
+        return re.sub(r'\s+', '', s).casefold()
+    chosen_canon = canon(chosen_line)
+    for cand in candidates:
+        if canon(cand) == chosen_canon:
+            return cand
+    
+    # 3) 부분 포함 일치 (양방향 검사, 대소문자 무시)
+    for cand in candidates:
+        if cand.lower() in chosen_line.lower() or chosen_line.lower() in cand.lower():
+            return cand
+    
+    # 4) 근접 일치 (표기 차이/오탈자 보정)
+    close = difflib.get_close_matches(chosen_line, candidates, n=1, cutoff=0.6)
+    if close:
+        return close[0]
+    
+    # 5) 매칭 실패 시 원문 유지
+    return chosen_line
 
 
 def get_stage_guideline_message(stage: int) -> str:
@@ -511,6 +592,16 @@ def process_user_input(user_input):
                 "hypothesis_report": transition_data
             })
         elif "Validated String:" in transition_data:
+            # Stage 2 후보 중 정확히 동일한 문자열로 정규화하여 저장
+            try:
+                stage2_output = stage_handler.get_stage_output(2)
+                hypothesis_report = stage2_output.get("hypothesis_report", "") if stage2_output else ""
+                candidates = _extract_top_diagnosis_candidates(hypothesis_report)
+                normalized_choice = _normalize_validated_to_candidates(transition_data, candidates)
+                transition_data = f"Validated String:\n{normalized_choice}"
+            except Exception as e:
+                print(f"[Stage 3] Validated String 정규화 실패: {e}")
+            
             stage_handler.save_stage_output(current_stage, {
                 "validation_result": transition_data,
                 "user_visible_message": user_message

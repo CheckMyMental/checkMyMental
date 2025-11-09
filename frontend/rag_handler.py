@@ -142,7 +142,9 @@ def call_rag_solution_api(diagnosis: str, api_url: str = "http://localhost:8000/
             
             print(f"[RAG Handler] 솔루션 API 호출 성공")
             print(f"[RAG Handler] 응답: diagnosis={result.get('diagnosis')}, evidence 개수={len(result.get('evidence', []))}")
-            
+            print(f"[RAG Handler] return 값 확인 : {result}")
+
+
             return result
             
     except httpx.RequestError as e:

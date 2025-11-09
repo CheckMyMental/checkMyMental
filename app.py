@@ -9,7 +9,6 @@ from frontend.ui_components import (
     render_main_header,
     render_chat_messages,
     render_user_input,
-    render_stage_guideline_by_stage,
 )
 from frontend.chat_handler import init_chat_history, process_user_input, get_current_stage_info
 
@@ -28,7 +27,7 @@ render_main_header()
 # 채팅 히스토리 초기화 (가이드라인 메시지 포함)
 init_chat_history()
 
-# 채팅 메시지 표시
+# # 채팅 메시지 표시
 render_chat_messages(st.session_state.messages)
 
 # 사용자 입력 처리

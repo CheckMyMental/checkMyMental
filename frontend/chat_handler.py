@@ -180,7 +180,7 @@ def execute_stage_initial_action(stage: int):
     
     # 단계별 가이드라인을 채팅 메시지로 추가 (히스토리에 유지)
     add_stage_guideline_message(stage)
-    
+
     print(f"[Stage {stage}] 초기 행동 실행 시작 (behavior: {behavior})")
     
     if stage == 2:
@@ -254,7 +254,7 @@ def execute_stage2_hypothesis_generation():
         
         # Stage 3 가이드라인을 채팅 메시지로 추가
         add_stage_guideline_message(3)
-        
+
         # Stage 3 초기 행동 실행 (감별 질문 생성)
         execute_stage3_initial_question()
     else:

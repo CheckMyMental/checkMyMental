@@ -98,7 +98,11 @@ def init_chat_history():
     
     # 초기 가이드라인 메시지 및 인사 메시지 추가 (첫 실행 시에만)
     if "guideline_added" not in st.session_state:
-        # UI 컴포넌트 방식으로 가이드라인을 렌더링하므로, 채팅 메시지로는 인사만 남김
+        current_stage = st.session_state.stage_handler.get_current_stage()
+        # Stage 1 가이드라인을 채팅 메시지로 추가
+        add_stage_guideline_message(current_stage)
+        
+        # 인사 메시지 추가
         greeting_message = "안녕하세요! 저는 AI 정신건강 상담 도우미입니다. 오늘 어떤 도움이 필요하신가요? 편하게 말씀해주세요."
         st.session_state.messages.append({
             "role": "assistant",
@@ -125,6 +129,45 @@ def get_conversation_history(exclude_last=False):
     return st.session_state.messages.copy()
 
 
+def add_stage_guideline_message(stage: int):
+    """
+    단계별 가이드라인을 채팅 메시지로 추가 (히스토리에 유지)
+    
+    Args:
+        stage: 단계 번호
+    """
+    from .stage_guidelines import STAGE_GUIDELINES
+    
+    guideline = STAGE_GUIDELINES.get(stage)
+    if not guideline:
+        return
+    
+    # 가이드라인 HTML 생성
+    what_to_do_items = "".join([f"<li>{item}</li>" for item in guideline["what_to_do"]])
+    tips_items = "".join([f"<li>{item}</li>" for item in guideline["tips"]])
+    
+    html_content = f"""<div style="background: linear-gradient(135deg, {guideline["color"]}15 0%, {guideline["color"]}05 100%); border-left: 4px solid {guideline["color"]}; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+    <h4 style="color: {guideline["color"]}; margin-top: 0;">{guideline["title"]}</h4>
+    <p style="color: #666; margin-bottom: 1rem;">{guideline["description"]}</p>
+    <div style="margin-bottom: 0.5rem;">
+        <strong style="color: {guideline["color"]};">이 단계에서 할 일:</strong>
+        <ul style="margin-top: 0.5rem;">{what_to_do_items}</ul>
+    </div>
+    <div>
+        <strong style="color: {guideline["color"]};">💡 유의사항:</strong>
+        <ul style="margin-top: 0.5rem;">{tips_items}</ul>
+    </div>
+</div>"""
+    
+    # 채팅 메시지로 추가 (히스토리에 유지)
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": html_content,
+        "is_guideline": True,
+        "stage": stage
+    })
+
+
 def execute_stage_initial_action(stage: int):
     """
     단계 전환 후 초기 행동 자동 실행
@@ -135,12 +178,8 @@ def execute_stage_initial_action(stage: int):
     stage_handler = st.session_state.stage_handler
     behavior = stage_handler.get_stage_behavior(stage)
     
-    # 단계별 가이드라인 UI 컴포넌트 렌더링
-    try:
-        from .ui_components import render_stage_guideline_by_stage
-        render_stage_guideline_by_stage(stage)
-    except Exception as e:
-        print(f"[Stage {stage}] 가이드라인 UI 렌더 실패: {e}")
+    # 단계별 가이드라인을 채팅 메시지로 추가 (히스토리에 유지)
+    add_stage_guideline_message(stage)
     
     print(f"[Stage {stage}] 초기 행동 실행 시작 (behavior: {behavior})")
     
@@ -162,13 +201,6 @@ def execute_stage2_hypothesis_generation():
     사용자 입력 없이 Summary String -> Hypothesis String 생성
     """
     print(f"[Stage 2] 자동 가설 생성 시작")
-    
-    # Stage 2 가이드라인 UI 컴포넌트 표시
-    try:
-        from .ui_components import render_stage_guideline_by_stage
-        render_stage_guideline_by_stage(2)
-    except Exception as e:
-        print(f"[Stage 2] 가이드라인 UI 렌더 실패: {e}")
     
     stage_handler = st.session_state.stage_handler
     
@@ -220,12 +252,8 @@ def execute_stage2_hypothesis_generation():
         # Stage 3로 자동 전환
         stage_handler.move_to_next_stage()
         
-        # Stage 3 가이드라인 UI 컴포넌트 표시
-        try:
-            from .ui_components import render_stage_guideline_by_stage
-            render_stage_guideline_by_stage(3)
-        except Exception as e:
-            print(f"[Stage 3] 가이드라인 UI 렌더 실패: {e}")
+        # Stage 3 가이드라인을 채팅 메시지로 추가
+        add_stage_guideline_message(3)
         
         # Stage 3 초기 행동 실행 (감별 질문 생성)
         execute_stage3_initial_question()
@@ -240,13 +268,6 @@ def execute_stage3_initial_question():
     Hypothesis String -> 감별 질문 생성
     """
     print(f"[Stage 3] 감별 질문 생성 시작")
-    
-    # Stage 3 가이드라인 UI 컴포넌트 표시
-    try:
-        from .ui_components import render_stage_guideline_by_stage
-        render_stage_guideline_by_stage(3)
-    except Exception as e:
-        print(f"[Stage 3] 가이드라인 UI 렌더 실패: {e}")
     
     stage_handler = st.session_state.stage_handler
     
@@ -290,13 +311,6 @@ def execute_stage4_final_summary():
     Validated String + Stage 1 Summary -> Final Response
     """
     print(f"[Stage 4] 최종 요약 생성 시작")
-    
-    # Stage 4 가이드라인 UI 컴포넌트 표시
-    try:
-        from .ui_components import render_stage_guideline_by_stage
-        render_stage_guideline_by_stage(4)
-    except Exception as e:
-        print(f"[Stage 4] 가이드라인 UI 렌더 실패: {e}")
     
     stage_handler = st.session_state.stage_handler
     

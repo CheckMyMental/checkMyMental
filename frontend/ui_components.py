@@ -85,33 +85,10 @@ def render_chat_messages(messages):
         is_guideline = message.get("is_guideline", False)
 
         if is_guideline:
-            # 가이드라인 메시지는 다른 배경색으로 표시
-            # 배경색 설정 (원하는 색상으로 변경 가능)
-            bg_color_hex = "#FFDA9A"  # 배경색 (연한 파란색, 원하는 색으로 변경)
-            border_color_hex = "#FFCC00"  # 테두리 색상 (진한 파란색, 원하는 색으로 변경)
-            
-            # hex 색상을 rgb로 변환 (배경색)
-            bg_hex = bg_color_hex.lstrip("#")
-            bg_rgb = tuple(int(bg_hex[i : i + 2], 16) for i in (0, 2, 4))
-            bg_color_rgba = f"rgba({bg_rgb[0]}, {bg_rgb[1]}, {bg_rgb[2]}, 0.8)"
-
-            # 메시지 내용을 HTML로 감싸서 배경색 적용
-            # HTML이 포함된 메시지이므로 unsafe_allow_html=True 필요
-            styled_content = f"""
-<div style="
-    background: {bg_color_rgba};
-    border-left: 4px solid {border_color_hex};
-    padding: 1rem;
-    border-radius: 8px;
-    margin: 0;
-    width: 100%;
-    box-sizing: border-box;
-">
-{message["content"]}
-</div>
-"""
+            # 가이드라인 메시지는 이미 HTML로 스타일링되어 있으므로 그대로 표시
+            # content가 이미 완전한 HTML이므로 unsafe_allow_html=True 필요
             with st.chat_message(message["role"]):
-                st.markdown(styled_content, unsafe_allow_html=True)
+                st.markdown(message["content"], unsafe_allow_html=True)
         else:
             # 일반 메시지는 기본 스타일로 표시
             with st.chat_message(message["role"]):

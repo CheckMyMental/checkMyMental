@@ -25,11 +25,6 @@ render_sidebar()
 # 메인 헤더 렌더링
 render_main_header()
 
-# 현재 단계 가이드라인 렌더링 (UI 컴포넌트 방식)
-stage_info = get_current_stage_info()
-if stage_info:
-    render_stage_guideline_by_stage(stage_info["stage"])
-
 # 채팅 히스토리 초기화 (가이드라인 메시지 포함)
 init_chat_history()
 

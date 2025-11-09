@@ -426,14 +426,34 @@ def _finalize_stage3_validation() -> str:
         add_assistant_message("오류: 이전 단계 데이터를 찾을 수 없습니다.")
         return "오류가 발생했습니다."
     
-    # 답변 포맷팅 (LLM이 이해할 수 있는 형식으로)
-    formatted_answers = "\n".join([f"{qid}: {answer}" for qid, answer in all_answers.items()])
+    # 질문과 답변을 구조화된 형식으로 포맷팅
+    # all_questions는 [{"id": "Q1", "text": "..."}, ...] 형식
+    questions_text = "\n".join([f"{q.get('id', '')}. {q.get('text', '')}" for q in all_questions if isinstance(q, dict)])
+    formatted_answers = "\n".join([f"{qid}: {answer}" for qid, answer in sorted(all_answers.items(), key=lambda x: int(x[0].replace('Q', '')))])
     
     # Stage 3 프롬프트와 컨텍스트 로드
     prompt_template, context_data = stage_handler.get_stage_materials(3)
     
     # 최종 분석 요청 (LLM에게 스코어링 및 확정 요청)
-    user_input_for_llm = f"모든 질문에 대한 답변이 완료되었습니다. 답변 내용:\n{formatted_answers}\n\n위 답변을 바탕으로 최종 진단을 확정해주세요."
+    # 중요: 프롬프트의 "턴 2" 지시사항을 명확히 언급
+    user_input_for_llm = f"""턴 2: 사용자 응답 수신 후 확정 단계입니다.
+
+다음은 이전에 생성한 질문과 사용자가 답변한 Likert 응답입니다:
+
+질문:
+{questions_text}
+
+사용자 답변:
+{formatted_answers}
+
+위 답변을 바탕으로 프롬프트의 "2) 응답 스코어링 및 확률 산출(턴 2)" 지시사항에 따라:
+1. 문항별 점수를 계산하고 (Likert 매핑: 매우 그렇다=+2, 그렇다=+1, 보통이다=0, 약간 그렇지 않다=-1, 매우 그렇지 않다=-2)
+2. 후보별 총점을 집계하고
+3. 확률을 계산하여
+4. 최종 확정 질환명을 선택한 후
+5. 반드시 '---INTERNAL_DATA---' 섹션에 'Validated String:'과 'Validation JSON:'을 포함하여 출력해주세요.
+
+**중요**: 질문을 다시 생성하지 말고, 위 답변을 스코어링하여 최종 진단을 확정하세요."""
     
     response = ask_gemini_with_stage(
         user_input=user_input_for_llm,

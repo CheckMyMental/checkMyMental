@@ -1,5 +1,6 @@
 # UI 컴포넌트 모듈
 import streamlit as st
+import time
 
 
 def setup_page_config():
@@ -69,6 +70,9 @@ def render_sidebar():
             # 가이드라인 메시지도 다시 추가되도록 플래그 초기화
             if "guideline_added" in st.session_state:
                 del st.session_state.guideline_added
+            # 렌더링 카운트도 초기화
+            if "rendered_message_count" in st.session_state:
+                del st.session_state.rendered_message_count
             st.rerun()
 
 
@@ -79,8 +83,12 @@ def render_main_header():
 
 
 def render_chat_messages(messages):
+    # 이미 렌더링된 메시지 수 추적
+    if "rendered_message_count" not in st.session_state:
+        st.session_state.rendered_message_count = 0
+    
     # 채팅 메시지들을 화면에 표시
-    for message in messages:
+    for idx, message in enumerate(messages):
         # 가이드라인 메시지인지 확인
         is_guideline = message.get("is_guideline", False)
 
@@ -90,9 +98,22 @@ def render_chat_messages(messages):
             with st.chat_message(message["role"]):
                 st.markdown(message["content"], unsafe_allow_html=True)
         else:
-            # 일반 메시지는 기본 스타일로 표시
+            # 일반 메시지 표시
             with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+                # 사용자 메시지는 바로 표시
+                if message["role"] == "user":
+                    st.markdown(message["content"])
+                else:
+                    # 새로 추가된 Assistant 메시지만 타이핑 효과 적용
+                    # 이미 표시된 메시지는 바로 표시
+                    if idx < st.session_state.rendered_message_count:
+                        st.markdown(message["content"])
+                    else:
+                        # 새 메시지는 타이핑 효과 적용
+                        _render_typing_effect(message["content"])
+    
+    # 렌더링된 메시지 수 업데이트
+    st.session_state.rendered_message_count = len(messages)
 
 
 def render_user_input():
@@ -100,9 +121,32 @@ def render_user_input():
     return st.chat_input("지금 어떤 기분이신가요?")
 
 
+def _render_typing_effect(text, speed=0.02):
+    """
+    타이핑 효과로 텍스트를 표시
+    
+    Args:
+        text: 표시할 텍스트
+        speed: 각 문자 사이의 딜레이 (초)
+    """
+    # Streamlit의 write_stream을 사용 (1.28.0+)
+    # 버전이 낮으면 fallback으로 일반 표시
+    try:
+        # 텍스트를 문자 단위로 나눠서 스트림으로 전달
+        def text_generator():
+            for char in text:
+                yield char
+                time.sleep(speed)
+        
+        st.write_stream(text_generator())
+    except AttributeError:
+        # write_stream이 없는 경우 일반 표시
+        st.markdown(text)
+
+
 def render_assistant_response(response):
-    # AI 응답을 화면에 표시
+    # AI 응답을 화면에 표시 (타이핑 효과 포함)
     with st.chat_message("assistant"):
-        st.markdown(response)
+        _render_typing_effect(response)
 
 

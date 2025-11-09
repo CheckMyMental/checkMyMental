@@ -98,6 +98,55 @@ def ask_gemini(
 #     Gemini의 응답 텍스트
 #========================================================================================================
 
+def _format_rag_result(rag_result: dict) -> str:
+    """
+    RAG 검색 결과를 Gemini가 이해하기 쉬운 형식으로 포맷팅
+    
+    Args:
+        rag_result: RAG API 응답 딕셔너리
+    
+    Returns:
+        포맷팅된 문자열
+    """
+    formatted_parts = []
+    
+    # 입력 증상
+    input_symptom = rag_result.get("input_symptom", "")
+    if input_symptom:
+        formatted_parts.append(f"### 입력 증상\n{input_symptom}\n")
+    
+    # 질환 후보
+    diagnosis_candidates = rag_result.get("diagnosis_candidates", [])
+    if diagnosis_candidates:
+        formatted_parts.append(f"### 검색된 질환 후보 (Top {len(diagnosis_candidates)})\n")
+        for idx, diag in enumerate(diagnosis_candidates, 1):
+            formatted_parts.append(f"{idx}. {diag}")
+        formatted_parts.append("")
+    
+    # 각 질환별 진단 기준
+    by_diagnosis = rag_result.get("by_diagnosis", {})
+    if by_diagnosis:
+        formatted_parts.append("### 각 질환별 진단 기준\n")
+        for diag, criteria_list in by_diagnosis.items():
+            if criteria_list and len(criteria_list) > 0:
+                formatted_parts.append(f"#### {diag}")
+                for criteria in criteria_list:
+                    text = criteria.get("text", "")
+                    metadata = criteria.get("metadata", {})
+                    page = metadata.get("page", "N/A")
+                    
+                    if text:
+                        formatted_parts.append(f"**진단 기준 (페이지 {page}):**")
+                        formatted_parts.append(text)
+                        formatted_parts.append("")
+            else:
+                formatted_parts.append(f"#### {diag}")
+                formatted_parts.append("(진단 기준 정보 없음)")
+                formatted_parts.append("")
+    
+    return "\n".join(formatted_parts)
+
+
 def ask_gemini_with_stage(
     user_input: str,
     prompt_template: str,
@@ -142,14 +191,31 @@ def ask_gemini_with_stage(
                 stage3_validation = previous_stage_data.get("stage3_validation", "")
                 input_section = f"{stage3_validation}\n\n## Stage 1 Summary (참고용)\n{stage1_summary}" if stage1_summary else stage3_validation
             elif isinstance(previous_stage_data, dict):
-                # summary_report, hypothesis_report, validation_result 등에서 실제 문자열 추출
-                for key in ["summary_report", "hypothesis_report", "validation_result"]:
-                    if key in previous_stage_data:
-                        input_section = previous_stage_data[key]
-                        break
-                # 만약 위 키가 없으면 전체를 JSON으로 표시
-                if not input_section:
-                    input_section = json.dumps(previous_stage_data, ensure_ascii=False, indent=2)
+                # RAG 결과가 있으면 포맷팅해서 포함
+                rag_result = previous_stage_data.get("rag_result")
+                if rag_result:
+                    # RAG 결과를 읽기 쉬운 형식으로 포맷팅
+                    rag_formatted = _format_rag_result(rag_result)
+                    input_section = rag_formatted
+                    
+                    # summary_report도 있으면 함께 포함
+                    summary_report = previous_stage_data.get("summary_report", "")
+                    if summary_report:
+                        # Summary String에서 실제 내용만 추출
+                        if "Summary String:" in summary_report:
+                            summary_content = summary_report.split("Summary String:", 1)[1].strip()
+                        else:
+                            summary_content = summary_report
+                        input_section = f"## Summary String\n{summary_content}\n\n## RAG Search Results\n{rag_formatted}"
+                else:
+                    # RAG 결과가 없으면 기존 로직대로 처리
+                    for key in ["summary_report", "hypothesis_report", "validation_result"]:
+                        if key in previous_stage_data:
+                            input_section = previous_stage_data[key]
+                            break
+                    # 만약 위 키가 없으면 전체를 JSON으로 표시
+                    if not input_section:
+                        input_section = json.dumps(previous_stage_data, ensure_ascii=False, indent=2)
             else:
                 input_section = str(previous_stage_data)
         

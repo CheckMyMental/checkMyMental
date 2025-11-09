@@ -453,7 +453,6 @@ def process_user_input(user_input):
         print(f"[오류] 빈 응답이 반환되었습니다!")
         response = "죄송합니다. 응답 생성에 문제가 발생했습니다. 다시 시도해주세요."
     
-    print(f"[Chat Handler] 원본 응답 길이: {len(response)} 문자")
     
     # 응답을 사용자 메시지와 내부 데이터로 분리
     user_message, internal_data = parse_ai_response(response)
@@ -461,7 +460,6 @@ def process_user_input(user_input):
     # 사용자에게 표시할 메시지가 있으면 추가
     if user_message:
         add_assistant_message(user_message)
-        print(f"[Chat Handler] 사용자에게 표시: {len(user_message)} 문자")
     else:
         print(f"[Chat Handler] 사용자에게 표시할 메시지 없음 (내부 처리 단계)")
     
@@ -471,7 +469,6 @@ def process_user_input(user_input):
     # 자동 단계 전환 체크
     current_history = get_conversation_history(exclude_last=False)
     if stage_handler.should_transition(transition_data, conversation_history=current_history):
-        print(f"[Chat Handler] 단계 전환 조건 충족 - 내부 데이터 저장 중")
         
         # 내부 데이터를 stage_output에 저장 (다음 단계 입력으로 사용)
         if "Summary String:" in transition_data:

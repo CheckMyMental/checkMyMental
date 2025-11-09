@@ -67,7 +67,8 @@ def call_rag_api(request_data: Dict, api_url: str = "http://localhost:8000/rag/h
             result = response.json()
             
             print(f"[RAG Handler] API 호출 성공")
-            print(f"[RAG Handler] 검색된 질환 후보: {result.get('diagnosis_candidates', [])}")
+            # print(f"[RAG Handler] 검색된 질환 후보: {result.get('diagnosis_candidates', [])}")
+            print(f"[RAG Handler] return 값 확인 : {result}")
             
             return result
             

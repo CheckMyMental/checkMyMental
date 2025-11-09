@@ -198,7 +198,7 @@ def execute_stage_initial_action(stage: int):
 def execute_stage2_hypothesis_generation():
     """
     Stage 2: 가설 생성 단계 자동 실행
-    사용자 입력 없이 Summary String -> Hypothesis String 생성
+    사용자 입력 없이 Summary String -> RAG 검색 -> Hypothesis String 생성
     """
     print(f"[Stage 2] 자동 가설 생성 시작")
     
@@ -217,16 +217,36 @@ def execute_stage2_hypothesis_generation():
     processing_message = "수집하신 정보를 바탕으로 관련 질환을 검색하고 있습니다. 잠시만 기다려주세요..."
     add_assistant_message(processing_message)
     
+    # RAG API 호출
+    from .rag_handler import process_stage2_rag
+    
+    rag_result = process_stage2_rag(
+        internal_data=summary_report,
+        top_k=12,
+        diag_top_n=3
+    )
+    
+    if not rag_result:
+        print(f"[Stage 2 오류] RAG 검색 실패")
+        add_assistant_message("질환 검색 중 오류가 발생했습니다. 다시 시도해주세요.")
+        return
+    
+    # RAG 결과를 previous_stage_data에 추가
+    enhanced_stage1_output = {
+        **stage1_output,
+        "rag_result": rag_result
+    }
+    
     # Stage 2 프롬프트와 컨텍스트 로드
     prompt_template, context_data = stage_handler.get_stage_materials(2)
     
-    # Gemini API 호출 (user_input은 비어있음 - 이전 단계 데이터만 사용)
+    # Gemini API 호출 (RAG 결과 포함)
     response = ask_gemini_with_stage(
         user_input="",  # Stage 2는 사용자 입력 불필요
         prompt_template=prompt_template,
         context_data=context_data,
         conversation_history=None,  # Stage 2는 히스토리 불필요
-        previous_stage_data=stage1_output
+        previous_stage_data=enhanced_stage1_output
     )
     
     # 응답 검증

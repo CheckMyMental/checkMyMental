@@ -74,11 +74,6 @@ class StageHandler:
         try:
             with open(prompt_file, "r", encoding="utf-8") as f:
                 prompt_content = f.read()
-                print(f"\n{'='*80}")
-                print(f"[Stage {stage}] 프롬프트 파일 로드: {self.STAGES[stage]['prompt_file']}")
-                print(f"{'='*80}")
-                print(f"프롬프트 내용 (처음 500자):\n{prompt_content[:500]}...")
-                print(f"{'='*80}\n")
                 return prompt_content
         except Exception as e:
             print(f"프롬프트 로드 오류 (Stage {stage}): {e}")

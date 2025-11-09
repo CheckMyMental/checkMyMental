@@ -347,7 +347,8 @@ def execute_stage2_hypothesis_generation():
     if "Hypothesis String:" in transition_data:
         # Hypothesis String 저장
         stage_handler.save_stage_output(2, {
-            "hypothesis_report": transition_data
+            "hypothesis_report": transition_data,
+            "rag_result": rag_result  # Stage 3에서 by_diagnosis(진단 기준) 활용을 위해 포함
         })
         
         print(f"[Stage 2] 가설 생성 완료 - Stage 3으로 자동 전환")
@@ -380,6 +381,25 @@ def execute_stage3_initial_question():
         print(f"[Stage 3 오류] Stage 2 데이터 없음")
         add_assistant_message("오류: 가설 데이터를 찾을 수 없습니다.")
         return
+    
+    # Stage 3로 전달되는 데이터셋 확인
+    print(f"[Stage 3] 전달되는 데이터셋:")
+    print(f"  - stage2_output keys: {list(stage2_output.keys())}")
+    if "hypothesis_report" in stage2_output:
+        hypothesis_preview = stage2_output["hypothesis_report"][:200] if isinstance(stage2_output["hypothesis_report"], str) else str(stage2_output["hypothesis_report"])[:200]
+        print(f"  - hypothesis_report (preview): {hypothesis_preview}...")
+    if "rag_result" in stage2_output:
+        rag_result = stage2_output["rag_result"]
+        if isinstance(rag_result, dict):
+            print(f"  - rag_result keys: {list(rag_result.keys())}")
+            if "diagnosis_candidates" in rag_result:
+                print(f"  - diagnosis_candidates: {rag_result['diagnosis_candidates']}")
+            if "by_diagnosis" in rag_result:
+                print(f"  - by_diagnosis keys: {list(rag_result['by_diagnosis'].keys())}")
+                for diag, criteria_list in rag_result["by_diagnosis"].items():
+                    if criteria_list and len(criteria_list) > 0:
+                        text_preview = criteria_list[0].get("text", "")[:100] if isinstance(criteria_list[0], dict) else ""
+                        print(f"    - {diag}: {len(criteria_list)} criteria, text preview: {text_preview}...")
     
     # Stage 3 프롬프트와 컨텍스트 로드
     prompt_template, context_data = stage_handler.get_stage_materials(3)

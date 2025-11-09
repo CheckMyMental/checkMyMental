@@ -251,6 +251,20 @@ def ask_gemini_with_stage(
                         else:
                             summary_content = summary_report
                         input_section = f"## Summary String\n{summary_content}\n\n## RAG Search Results\n{rag_formatted}"
+                    else:
+                        # hypothesis_report가 있으면 함께 포함 (Stage 3에서 사용)
+                        hypothesis_report = previous_stage_data.get("hypothesis_report", "")
+                        if hypothesis_report:
+                            # Hypothesis String에서 실제 내용만 추출
+                            if "Hypothesis String:" in hypothesis_report:
+                                hypothesis_content = hypothesis_report.split("Hypothesis String:", 1)[1].strip()
+                            else:
+                                hypothesis_content = hypothesis_report
+                            input_section = f"## Hypothesis String\n{hypothesis_content}\n\n## RAG Search Results\n{rag_formatted}"
+                            print(f"[Gemini API] Stage 3 input_section 생성 완료 (Hypothesis String + RAG Search Results)")
+                            print(f"  - Hypothesis String 길이: {len(hypothesis_content)} 문자")
+                            print(f"  - RAG Search Results 길이: {len(rag_formatted)} 문자")
+                            print(f"  - 전체 input_section 길이: {len(input_section)} 문자")
                 else:
                     # RAG 결과가 없으면 기존 로직대로 처리
                     for key in ["summary_report", "hypothesis_report", "validation_result"]:
@@ -262,6 +276,11 @@ def ask_gemini_with_stage(
                         input_section = json.dumps(previous_stage_data, ensure_ascii=False, indent=2)
             else:
                 input_section = str(previous_stage_data)
+        
+        # 최종 input_section 확인 (Stage 3 디버깅용)
+        if input_section:
+            print(f"[Gemini API] 최종 input_section 미리보기 (처음 500자):")
+            print(f"{input_section[:500]}...")
         
         full_prompt = f"""{prompt_template}
 

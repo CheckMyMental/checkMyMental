@@ -53,6 +53,13 @@ class StageHandler:
         # Stage 1 대화 턴 수 추적 (질문-응답 쌍)
         if "stage1_turn_count" not in st.session_state:
             st.session_state.stage1_turn_count = 0
+        # Stage 3 질문 관련 상태
+        if "stage3_questions" not in st.session_state:
+            st.session_state.stage3_questions = []  # 생성된 질문 리스트
+        if "stage3_current_question_index" not in st.session_state:
+            st.session_state.stage3_current_question_index = 0  # 현재 질문 인덱스
+        if "stage3_answers" not in st.session_state:
+            st.session_state.stage3_answers = {}  # 사용자 답변 저장 (Q1: "매우 그렇다", ...)
     
     def get_current_stage(self) -> int:
         """현재 단계 반환"""
@@ -139,6 +146,10 @@ class StageHandler:
         st.session_state.current_stage = 1
         st.session_state.stage_data = {}
         st.session_state.stage1_turn_count = 0
+        # Stage 3 상태 리셋
+        st.session_state.stage3_questions = []
+        st.session_state.stage3_current_question_index = 0
+        st.session_state.stage3_answers = {}
     
     def increment_stage1_turn(self):
         """Stage 1의 대화 턴 수 증가"""
@@ -148,6 +159,41 @@ class StageHandler:
     def get_stage1_turn_count(self) -> int:
         """Stage 1의 현재 대화 턴 수 반환"""
         return st.session_state.get("stage1_turn_count", 0)
+    
+    def init_stage3_questions(self, questions: list):
+        """Stage 3 질문 리스트 초기화"""
+        st.session_state.stage3_questions = questions
+        st.session_state.stage3_current_question_index = 0
+        st.session_state.stage3_answers = {}
+    
+    def get_stage3_current_question(self):
+        """현재 질문 가져오기"""
+        index = st.session_state.stage3_current_question_index
+        questions = st.session_state.stage3_questions
+        if 0 <= index < len(questions):
+            return questions[index]
+        return None
+    
+    def save_stage3_answer(self, question_id: str, answer: str):
+        """Stage 3 답변 저장"""
+        st.session_state.stage3_answers[question_id] = answer
+    
+    def move_to_next_stage3_question(self) -> bool:
+        """다음 질문으로 이동 (성공 여부 반환)"""
+        st.session_state.stage3_current_question_index += 1
+        index = st.session_state.stage3_current_question_index
+        questions = st.session_state.stage3_questions
+        return index < len(questions)
+    
+    def is_stage3_complete(self) -> bool:
+        """Stage 3의 모든 질문이 완료되었는지 확인"""
+        index = st.session_state.stage3_current_question_index
+        questions = st.session_state.stage3_questions
+        return len(questions) > 0 and index >= len(questions)
+    
+    def get_stage3_all_answers(self) -> dict:
+        """Stage 3의 모든 답변 가져오기"""
+        return st.session_state.stage3_answers.copy()
     
     def save_stage_output(self, stage: int, data: Dict):
         """특정 단계의 출력 데이터를 저장 (다음 단계 입력으로 활용)"""

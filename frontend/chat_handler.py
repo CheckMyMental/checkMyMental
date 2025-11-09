@@ -59,6 +59,43 @@ def remove_system_tags(response: str) -> str:
     return cleaned.strip()
 
 
+def _parse_stage3_questions(response_text: str) -> list:
+    """
+    LLM 응답에서 Stage 3 질문 리스트 파싱
+    
+    예상 형식:
+    Q1. 질문 텍스트...
+    Q2. 질문 텍스트...
+    Q3. 질문 텍스트...
+    
+    Returns:
+        [{"id": "Q1", "text": "질문 텍스트"}, ...]
+    """
+    if not response_text:
+        return []
+    
+    questions = []
+    # Q1., Q2., Q3. 형태의 질문을 파싱
+    pattern = re.compile(r'^(Q\d+)\.\s*(.+?)$', flags=re.MULTILINE)
+    matches = pattern.findall(response_text)
+    
+    for match in matches:
+        question_id = match[0]
+        question_text = match[1].strip()
+        
+        # 참고 정보가 있으면 제거 (괄호 안의 "참고: ..." 부분)
+        # 예: "(참고: 주요 우울 장애의 진단 기준 A(2) - ...)"
+        question_text = re.sub(r'\s*\(참고:.*?\)\s*$', '', question_text, flags=re.IGNORECASE)
+        
+        if question_text:
+            questions.append({
+                "id": question_id,
+                "text": question_text
+            })
+    
+    return questions
+
+
 def _extract_top_diagnosis_candidates(hypothesis_report: str) -> list:
     """
     Stage 2의 'Hypothesis String' 포맷에서 Top N 후보 질환명을 추출
@@ -367,10 +404,159 @@ def execute_stage2_hypothesis_generation():
         add_assistant_message("가설 생성 중 오류가 발생했습니다. 다시 시도해주세요.")
 
 
+def _finalize_stage3_validation() -> str:
+    """
+    Stage 3의 모든 질문이 완료되었을 때 최종 분석 수행
+    
+    Returns:
+        사용자에게 표시할 메시지 (Stage 4로 전환 완료 메시지)
+    """
+    stage_handler = st.session_state.stage_handler
+    
+    # 모든 답변 수집
+    all_answers = stage_handler.get_stage3_all_answers()
+    all_questions = st.session_state.stage3_questions
+    
+    print(f"[Stage 3] 최종 분석 시작 - 총 {len(all_answers)}개 답변 수집")
+    
+    # Stage 2 데이터 가져오기
+    stage2_output = stage_handler.get_stage_output(2)
+    if not stage2_output:
+        print(f"[Stage 3 오류] Stage 2 데이터 없음")
+        add_assistant_message("오류: 이전 단계 데이터를 찾을 수 없습니다.")
+        return "오류가 발생했습니다."
+    
+    # 답변 포맷팅 (LLM이 이해할 수 있는 형식으로)
+    formatted_answers = "\n".join([f"{qid}: {answer}" for qid, answer in all_answers.items()])
+    
+    # Stage 3 프롬프트와 컨텍스트 로드
+    prompt_template, context_data = stage_handler.get_stage_materials(3)
+    
+    # 최종 분석 요청 (LLM에게 스코어링 및 확정 요청)
+    user_input_for_llm = f"모든 질문에 대한 답변이 완료되었습니다. 답변 내용:\n{formatted_answers}\n\n위 답변을 바탕으로 최종 진단을 확정해주세요."
+    
+    response = ask_gemini_with_stage(
+        user_input=user_input_for_llm,
+        prompt_template=prompt_template,
+        context_data=context_data,
+        conversation_history=get_conversation_history(),
+        previous_stage_data=stage2_output
+    )
+    
+    # 응답 검증
+    if not response or response.strip() == "":
+        print(f"[Stage 3 오류] 빈 응답이 반환되었습니다!")
+        add_assistant_message("최종 분석 중 오류가 발생했습니다.")
+        return "오류가 발생했습니다."
+    
+    # 응답 파싱
+    user_message, internal_data = parse_ai_response(response)
+    
+    # 내부 데이터 확인
+    transition_data = internal_data if internal_data else response
+    
+    # Validated String 확인
+    if "Validated String:" in transition_data:
+        # Stage 2 후보 중 정확히 동일한 문자열로 정규화
+        try:
+            hypothesis_report = stage2_output.get("hypothesis_report", "")
+            candidates = _extract_top_diagnosis_candidates(hypothesis_report)
+            normalized_choice = _normalize_validated_to_candidates(transition_data, candidates)
+            final_validated_string = f"Validated String:\n{normalized_choice}"
+            
+            # Stage 3 데이터 저장
+            stage_handler.save_stage_output(3, {
+                "validation_result": final_validated_string,
+                "questions": all_questions,
+                "answers": all_answers
+            })
+            
+            print(f"[Stage 3] 최종 진단 확정: {normalized_choice}")
+            
+            # 사용자에게는 메시지를 표시하지 않고 바로 Stage 4로 전환
+            print(f"[Stage 3] Stage 4로 자동 전환")
+            stage_handler.move_to_next_stage()
+            
+            # Stage 4 초기 행동 실행 (최종 요약 생성)
+            execute_stage_initial_action(4)
+            
+            return "분석이 완료되었습니다."
+        except Exception as e:
+            print(f"[Stage 3 오류] Validated String 처리 실패: {e}")
+            add_assistant_message("최종 분석 중 오류가 발생했습니다.")
+            return "오류가 발생했습니다."
+    else:
+        print(f"[Stage 3 오류] Validated String 생성 실패")
+        add_assistant_message("최종 진단 확정 중 오류가 발생했습니다.")
+        return "오류가 발생했습니다."
+
+
+def _handle_stage3_answer(user_input: str) -> str:
+    """
+    Stage 3에서 사용자의 Likert 응답 처리
+    
+    Args:
+        user_input: 사용자의 답변
+        
+    Returns:
+        표시할 메시지 (다음 질문 또는 완료 메시지)
+    """
+    stage_handler = st.session_state.stage_handler
+    
+    # 현재 질문 가져오기
+    current_question = stage_handler.get_stage3_current_question()
+    if not current_question:
+        print(f"[Stage 3 오류] 현재 질문을 찾을 수 없습니다.")
+        add_assistant_message("오류: 질문 정보를 찾을 수 없습니다.")
+        return "오류가 발생했습니다."
+    
+    # Likert 응답 검증
+    valid_answers = ["매우 그렇다", "그렇다", "보통이다", "약간 그렇지 않다", "매우 그렇지 않다"]
+    user_answer = user_input.strip()
+    
+    # 유연한 매칭 (대소문자 무시, 공백 정규화)
+    normalized_input = re.sub(r'\s+', '', user_answer).lower()
+    matched_answer = None
+    for valid_answer in valid_answers:
+        normalized_valid = re.sub(r'\s+', '', valid_answer).lower()
+        if normalized_valid == normalized_input or valid_answer in user_answer:
+            matched_answer = valid_answer
+            break
+    
+    if not matched_answer:
+        # 유효하지 않은 응답
+        error_message = f"올바른 응답 형식이 아닙니다.\n\n다음 중 하나로 응답해주세요: {' / '.join(valid_answers)}"
+        add_assistant_message(error_message)
+        return error_message
+    
+    # 답변 저장
+    question_id = current_question['id']
+    stage_handler.save_stage3_answer(question_id, matched_answer)
+    print(f"[Stage 3] {question_id} 답변 저장: {matched_answer}")
+    
+    # 다음 질문으로 이동
+    has_next = stage_handler.move_to_next_stage3_question()
+    
+    if has_next:
+        # 다음 질문이 있으면 표시
+        next_question = stage_handler.get_stage3_current_question()
+        total_questions = len(st.session_state.stage3_questions)
+        current_index = st.session_state.stage3_current_question_index
+        
+        question_text = f"**질문 {next_question['id'].replace('Q', '')} / {total_questions}**\n\n{next_question['text']}\n\n응답 옵션: 매우 그렇다 / 그렇다 / 보통이다 / 약간 그렇지 않다 / 매우 그렇지 않다"
+        add_assistant_message(question_text)
+        print(f"[Stage 3] 다음 질문 ({current_index + 1}/{total_questions}) 표시")
+        return question_text
+    else:
+        # 모든 질문 완료
+        print(f"[Stage 3] 모든 질문 완료 - 최종 분석 시작")
+        return _finalize_stage3_validation()
+
+
 def execute_stage3_initial_question():
     """
-    Stage 3: 감별 질문 자동 생성 및 제시
-    Hypothesis String -> 감별 질문 생성
+    Stage 3: 감별 질문 자동 생성 및 첫 번째 질문 제시
+    Hypothesis String -> 감별 질문 리스트 생성 -> 첫 번째 질문만 표시
     """
     print(f"[Stage 3] 감별 질문 생성 시작")
     
@@ -403,7 +589,7 @@ def execute_stage3_initial_question():
     
     # 감별 질문 생성 (첫 번째 호출)
     response = ask_gemini_with_stage(
-        user_input="감별 질문을 생성해주세요.",  # 질문 생성 트리거
+        user_input="감별 질문 리스트를 생성해주세요. 질문 리스트만 생성하고, 사용자 응답은 기다리지 마세요.",
         prompt_template=prompt_template,
         context_data=context_data,
         conversation_history=get_conversation_history(),
@@ -416,13 +602,27 @@ def execute_stage3_initial_question():
         add_assistant_message("감별 질문 생성 중 오류가 발생했습니다.")
         return
     
-    # 사용자에게 감별 질문 표시
+    # 응답에서 질문 리스트 파싱
     user_message, internal_data = parse_ai_response(response)
-    if user_message:
-        add_assistant_message(user_message)
-        print(f"[Stage 3] 감별 질문 생성 완료 - 사용자 응답 대기")
+    questions = _parse_stage3_questions(user_message)
+    
+    if not questions or len(questions) == 0:
+        print(f"[Stage 3 오류] 질문 파싱 실패")
+        add_assistant_message("감별 질문 생성 중 오류가 발생했습니다.")
+        return
+    
+    # 질문 리스트 저장
+    stage_handler.init_stage3_questions(questions)
+    print(f"[Stage 3] 총 {len(questions)}개의 질문 생성 완료")
+    
+    # 첫 번째 질문만 사용자에게 표시
+    first_question = stage_handler.get_stage3_current_question()
+    if first_question:
+        question_text = f"**질문 {first_question['id'].replace('Q', '')} / {len(questions)}**\n\n{first_question['text']}\n\n응답 옵션: 매우 그렇다 / 그렇다 / 보통이다 / 약간 그렇지 않다 / 매우 그렇지 않다"
+        add_assistant_message(question_text)
+        print(f"[Stage 3] 첫 번째 질문 표시 완료 - 사용자 응답 대기")
     else:
-        print(f"[Stage 3 오류] 감별 질문 생성 실패")
+        print(f"[Stage 3 오류] 첫 번째 질문 가져오기 실패")
 
 
 def execute_stage4_final_summary():
@@ -526,6 +726,10 @@ def process_user_input(user_input):
     print(f"사용자 입력: {user_input}")
     print(f"현재 단계: {current_stage} ({stage_handler.get_stage_name()})")
     print(f"--------------------------------")
+    
+    # Stage 3 특별 처리: 질문에 대한 답변 수집
+    if current_stage == 3:
+        return _handle_stage3_answer(user_input)
     
     # 현재 단계의 프롬프트와 컨텍스트 로드
     prompt_template, context_data = stage_handler.get_stage_materials()

@@ -240,6 +240,8 @@ def execute_stage2_hypothesis_generation():
     
     # 내부 데이터 확인 및 저장
     transition_data = internal_data if internal_data else response
+
+    print(f"[Stage 2] 내부 데이터: {transition_data}")
     
     if "Hypothesis String:" in transition_data:
         # Hypothesis String 저장

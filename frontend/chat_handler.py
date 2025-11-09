@@ -703,6 +703,11 @@ def execute_stage4_final_summary():
     
     # 최종 응답 파싱 및 표시
     user_message, internal_data = parse_ai_response(response)
+    
+    # 시스템 태그 제거 (Final Response String: 등)
+    if user_message:
+        user_message = remove_system_tags(user_message)
+    
     if user_message:
         add_assistant_message(user_message)
         print(f"[Stage 4] 최종 요약 생성 완료")

@@ -38,5 +38,8 @@ Thumbs.db
 rag/chroma_db/
 *.sqlite3
 
-#DSM-5-TR
-DSM-5-TR.pdf
+#docs for embeddig
+documents/
+
+#extract disorders
+rag/extract_disorders.py

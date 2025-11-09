@@ -184,6 +184,33 @@ def _format_rag_hypothesis_result(rag_result: dict) -> str:
     return "\n".join(formatted_parts)
 
 
+def _format_by_diagnosis(by_diagnosis: dict) -> str:
+    """
+    Stage 3에서 사용하는 '깨끗한 진단 기준(by_diagnosis)'만을 포맷팅
+    """
+    if not isinstance(by_diagnosis, dict):
+        return ""
+    
+    formatted_parts = ["### 각 질환별 진단 기준"]
+    for diag, criteria_list in by_diagnosis.items():
+        formatted_parts.append(f"#### {diag}")
+        if criteria_list and isinstance(criteria_list, list):
+            for criteria in criteria_list:
+                if not isinstance(criteria, dict):
+                    continue
+                text = criteria.get("text", "")
+                metadata = criteria.get("metadata", {}) or {}
+                page = metadata.get("page", "N/A")
+                if text:
+                    formatted_parts.append(f"**진단 기준 (페이지 {page}):**")
+                    formatted_parts.append(text)
+                    formatted_parts.append("")
+        else:
+            formatted_parts.append("(진단 기준 정보 없음)")
+            formatted_parts.append("")
+    return "\n".join(formatted_parts)
+
+
 def ask_gemini_with_stage(
     user_input: str,
     prompt_template: str,
@@ -235,36 +262,45 @@ def ask_gemini_with_stage(
                 else:
                     input_section = f"{stage3_validation}\n\n## Stage 1 Summary (참고용)\n{stage1_summary}" if stage1_summary else stage3_validation
             elif isinstance(previous_stage_data, dict):
-                # RAG Hypothesis 결과가 있으면 포맷팅해서 포함
-                rag_result = previous_stage_data.get("rag_result")
-                if rag_result:
-                    # RAG Hypothesis 결과를 읽기 쉬운 형식으로 포맷팅
-                    rag_formatted = _format_rag_hypothesis_result(rag_result)
-                    input_section = rag_formatted
-                    
-                    # summary_report도 있으면 함께 포함
-                    summary_report = previous_stage_data.get("summary_report", "")
-                    if summary_report:
-                        # Summary String에서 실제 내용만 추출
-                        if "Summary String:" in summary_report:
-                            summary_content = summary_report.split("Summary String:", 1)[1].strip()
-                        else:
-                            summary_content = summary_report
-                        input_section = f"## Summary String\n{summary_content}\n\n## RAG Search Results\n{rag_formatted}"
-                    else:
-                        # hypothesis_report가 있으면 함께 포함 (Stage 3에서 사용)
-                        hypothesis_report = previous_stage_data.get("hypothesis_report", "")
-                        if hypothesis_report:
-                            # Hypothesis String에서 실제 내용만 추출
-                            if "Hypothesis String:" in hypothesis_report:
-                                hypothesis_content = hypothesis_report.split("Hypothesis String:", 1)[1].strip()
+                # Stage 3 전용: by_diagnosis가 있으면 이를 참고 자료로 포함
+                if "by_diagnosis" in previous_stage_data:
+                    bydiag = previous_stage_data.get("by_diagnosis") or {}
+                    bydiag_formatted = _format_by_diagnosis(bydiag)
+                    hypothesis_report = previous_stage_data.get("hypothesis_report", "")
+                    hypothesis_content = hypothesis_report
+                    if hypothesis_report and "Hypothesis String:" in hypothesis_report:
+                        hypothesis_content = hypothesis_report.split("Hypothesis String:", 1)[1].strip()
+                    # Hypothesis String + 각 질환별 진단 기준
+                    input_section = f"## Hypothesis String\n{hypothesis_content}\n\n## RAG Search Results\n{bydiag_formatted}"
+                    print(f"[Gemini API] Stage 3 input_section 생성 완료 (Hypothesis String + by_diagnosis)")
+                    print(f"  - Hypothesis String 길이: {len(hypothesis_content or '')} 문자")
+                    print(f"  - by_diagnosis 길이: {len(bydiag_formatted or '')} 문자")
+                    print(f"  - 전체 input_section 길이: {len(input_section)} 문자")
+                # (Stage 2 내부용) RAG Hypothesis 전체 결과가 있으면 그대로 포맷팅
+                elif "rag_result" in previous_stage_data:
+                    rag_result = previous_stage_data.get("rag_result")
+                    if rag_result:
+                        rag_formatted = _format_rag_hypothesis_result(rag_result)
+                        input_section = rag_formatted
+                        summary_report = previous_stage_data.get("summary_report", "")
+                        if summary_report:
+                            if "Summary String:" in summary_report:
+                                summary_content = summary_report.split("Summary String:", 1)[1].strip()
                             else:
-                                hypothesis_content = hypothesis_report
-                            input_section = f"## Hypothesis String\n{hypothesis_content}\n\n## RAG Search Results\n{rag_formatted}"
-                            print(f"[Gemini API] Stage 3 input_section 생성 완료 (Hypothesis String + RAG Search Results)")
-                            print(f"  - Hypothesis String 길이: {len(hypothesis_content)} 문자")
-                            print(f"  - RAG Search Results 길이: {len(rag_formatted)} 문자")
-                            print(f"  - 전체 input_section 길이: {len(input_section)} 문자")
+                                summary_content = summary_report
+                            input_section = f"## Summary String\n{summary_content}\n\n## RAG Search Results\n{rag_formatted}"
+                        else:
+                            hypothesis_report = previous_stage_data.get("hypothesis_report", "")
+                            if hypothesis_report:
+                                if "Hypothesis String:" in hypothesis_report:
+                                    hypothesis_content = hypothesis_report.split("Hypothesis String:", 1)[1].strip()
+                                else:
+                                    hypothesis_content = hypothesis_report
+                                input_section = f"## Hypothesis String\n{hypothesis_content}\n\n## RAG Search Results\n{rag_formatted}"
+                                print(f"[Gemini API] Stage 3 input_section 생성 완료 (Hypothesis String + RAG Search Results)")
+                                print(f"  - Hypothesis String 길이: {len(hypothesis_content)} 문자")
+                                print(f"  - RAG Search Results 길이: {len(rag_formatted)} 문자")
+                                print(f"  - 전체 input_section 길이: {len(input_section)} 문자")
                 else:
                     # RAG 결과가 없으면 기존 로직대로 처리
                     for key in ["summary_report", "hypothesis_report", "validation_result"]:

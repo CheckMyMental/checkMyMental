@@ -98,12 +98,49 @@ def ask_gemini(
 #     Gemini의 응답 텍스트
 #========================================================================================================
 
-def _format_rag_result(rag_result: dict) -> str:
+def _format_rag_solution(rag_solution: dict) -> str:
     """
-    RAG 검색 결과를 Gemini가 이해하기 쉬운 형식으로 포맷팅
+    RAG 솔루션 검색 결과를 Gemini가 이해하기 쉬운 형식으로 포맷팅
     
     Args:
-        rag_result: RAG API 응답 딕셔너리
+        rag_solution: RAG 솔루션 API 응답 딕셔너리
+    
+    Returns:
+        포맷팅된 문자열
+    """
+    formatted_parts = []
+    
+    # 확정 질환명
+    diagnosis = rag_solution.get("diagnosis", "")
+    if diagnosis:
+        formatted_parts.append(f"### 확정 질환명\n{diagnosis}\n")
+    
+    # 솔루션 증거
+    evidence = rag_solution.get("evidence", [])
+    if evidence:
+        formatted_parts.append(f"### 솔루션 및 치료 정보\n")
+        for idx, ev in enumerate(evidence, 1):
+            text = ev.get("text", "")
+            metadata = ev.get("metadata", {})
+            page = metadata.get("page", "N/A")
+            section = metadata.get("section", "N/A")
+            
+            if text:
+                formatted_parts.append(f"#### 정보 {idx} (페이지 {page}, 섹션: {section})")
+                formatted_parts.append(text)
+                formatted_parts.append("")
+    else:
+        formatted_parts.append("### 솔루션 및 치료 정보\n(관련 정보를 찾을 수 없습니다.)")
+    
+    return "\n".join(formatted_parts)
+
+
+def _format_rag_hypothesis_result(rag_result: dict) -> str:
+    """
+    RAG Hypothesis 검색 결과를 Gemini가 이해하기 쉬운 형식으로 포맷팅
+    
+    Args:
+        rag_result: RAG Hypothesis API 응답 딕셔너리
     
     Returns:
         포맷팅된 문자열
@@ -189,13 +226,20 @@ def ask_gemini_with_stage(
                 # Stage 4: Stage 1의 Summary String과 Stage 3의 Validated String 모두 포함
                 stage1_summary = previous_stage_data.get("stage1_summary", "")
                 stage3_validation = previous_stage_data.get("stage3_validation", "")
-                input_section = f"{stage3_validation}\n\n## Stage 1 Summary (참고용)\n{stage1_summary}" if stage1_summary else stage3_validation
+                
+                # RAG 솔루션 결과가 있으면 포함
+                rag_solution = previous_stage_data.get("rag_solution")
+                if rag_solution:
+                    solution_formatted = _format_rag_solution(rag_solution)
+                    input_section = f"{stage3_validation}\n\n## Stage 1 Summary (참고용)\n{stage1_summary}\n\n## RAG Solution Results\n{solution_formatted}" if stage1_summary else f"{stage3_validation}\n\n## RAG Solution Results\n{solution_formatted}"
+                else:
+                    input_section = f"{stage3_validation}\n\n## Stage 1 Summary (참고용)\n{stage1_summary}" if stage1_summary else stage3_validation
             elif isinstance(previous_stage_data, dict):
-                # RAG 결과가 있으면 포맷팅해서 포함
+                # RAG Hypothesis 결과가 있으면 포맷팅해서 포함
                 rag_result = previous_stage_data.get("rag_result")
                 if rag_result:
-                    # RAG 결과를 읽기 쉬운 형식으로 포맷팅
-                    rag_formatted = _format_rag_result(rag_result)
+                    # RAG Hypothesis 결과를 읽기 쉬운 형식으로 포맷팅
+                    rag_formatted = _format_rag_hypothesis_result(rag_result)
                     input_section = rag_formatted
                     
                     # summary_report도 있으면 함께 포함

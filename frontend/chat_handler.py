@@ -217,10 +217,10 @@ def execute_stage2_hypothesis_generation():
     processing_message = "수집하신 정보를 바탕으로 관련 질환을 검색하고 있습니다. 잠시만 기다려주세요..."
     add_assistant_message(processing_message)
     
-    # RAG API 호출
-    from .rag_handler import process_stage2_rag
+    # RAG Hypothesis API 호출
+    from .rag_handler import process_stage2_rag_hypothesis
     
-    rag_result = process_stage2_rag(
+    rag_result = process_stage2_rag_hypothesis(
         internal_data=summary_report,
         top_k=12,
         diag_top_n=3
@@ -330,7 +330,7 @@ def execute_stage3_initial_question():
 def execute_stage4_final_summary():
     """
     Stage 4: 최종 요약 및 솔루션 자동 생성
-    Validated String + Stage 1 Summary -> Final Response
+    Validated String + Stage 1 Summary -> RAG 솔루션 검색 -> Final Response
     """
     print(f"[Stage 4] 최종 요약 생성 시작")
     
@@ -345,17 +345,47 @@ def execute_stage4_final_summary():
         add_assistant_message("오류: 이전 단계의 데이터를 찾을 수 없습니다.")
         return
     
+    # Validated String에서 확정 질환명 추출
+    validation_result = stage3_output.get("validation_result", "")
+    diagnosis = ""
+    if "Validated String:" in validation_result:
+        # "Validated String:" 이후의 내용 추출
+        parts = validation_result.split("Validated String:", 1)
+        if len(parts) > 1:
+            diagnosis = parts[1].strip()
+    else:
+        # Validated String:이 없으면 전체를 질환명으로 간주
+        diagnosis = validation_result.strip()
+    
+    if not diagnosis:
+        print(f"[Stage 4 오류] 확정 질환명을 찾을 수 없습니다.")
+        add_assistant_message("오류: 확정 질환명을 찾을 수 없습니다.")
+        return
+    
+    print(f"[Stage 4] 확정 질환명: {diagnosis}")
+    
     # 사용자에게 처리 중임을 알림
     processing_message = "최종 분석 결과와 맞춤형 솔루션을 준비하고 있습니다..."
     add_assistant_message(processing_message)
     
+    # RAG 솔루션 API 호출
+    from .rag_handler import process_stage4_rag_solution
+    
+    rag_solution_result = process_stage4_rag_solution(diagnosis)
+    
+    if not rag_solution_result:
+        print(f"[Stage 4 경고] RAG 솔루션 검색 실패 - 솔루션 없이 진행")
+        # 솔루션이 없어도 진행 (Gemini가 기본 응답 생성)
+        rag_solution_result = None
+    
     # Stage 4 프롬프트와 컨텍스트 로드
     prompt_template, context_data = stage_handler.get_stage_materials(4)
     
-    # 통합 데이터 준비
+    # 통합 데이터 준비 (RAG 솔루션 결과 포함)
     previous_stage_data = {
         "stage1_summary": stage1_output.get("summary_report", ""),
-        "stage3_validation": stage3_output.get("validation_result", "")
+        "stage3_validation": stage3_output.get("validation_result", ""),
+        "rag_solution": rag_solution_result  # RAG 솔루션 결과 추가
     }
     
     # 최종 요약 생성

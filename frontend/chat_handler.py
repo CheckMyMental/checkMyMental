@@ -98,26 +98,14 @@ def init_chat_history():
     
     # 초기 가이드라인 메시지 및 인사 메시지 추가 (첫 실행 시에만)
     if "guideline_added" not in st.session_state:
-        current_stage = st.session_state.stage_handler.get_current_stage()
-        guideline_message = get_stage_guideline_message(current_stage)
-        if guideline_message:
-            # 가이드라인 메시지 추가
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": guideline_message,
-                "is_guideline": True,  # 가이드라인 메시지 플래그
-                "stage": current_stage  # 단계 정보 저장
-            })
-            
-            # 인사 메시지 추가
-            greeting_message = "안녕하세요! 저는 AI 정신건강 상담 도우미입니다. 오늘 어떤 도움이 필요하신가요? 편하게 말씀해주세요."
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": greeting_message,
-                "is_guideline": False  # 일반 메시지
-            })
-            
-            st.session_state.guideline_added = True
+        # UI 컴포넌트 방식으로 가이드라인을 렌더링하므로, 채팅 메시지로는 인사만 남김
+        greeting_message = "안녕하세요! 저는 AI 정신건강 상담 도우미입니다. 오늘 어떤 도움이 필요하신가요? 편하게 말씀해주세요."
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": greeting_message,
+            "is_guideline": False
+        })
+        st.session_state.guideline_added = True
 
 
 def add_user_message(content):
@@ -137,11 +125,234 @@ def get_conversation_history(exclude_last=False):
     return st.session_state.messages.copy()
 
 
+def execute_stage_initial_action(stage: int):
+    """
+    단계 전환 후 초기 행동 자동 실행
+    
+    Args:
+        stage: 전환된 새로운 단계 번호
+    """
+    stage_handler = st.session_state.stage_handler
+    behavior = stage_handler.get_stage_behavior(stage)
+    
+    # 단계별 가이드라인 UI 컴포넌트 렌더링
+    try:
+        from .ui_components import render_stage_guideline_by_stage
+        render_stage_guideline_by_stage(stage)
+    except Exception as e:
+        print(f"[Stage {stage}] 가이드라인 UI 렌더 실패: {e}")
+    
+    print(f"[Stage {stage}] 초기 행동 실행 시작 (behavior: {behavior})")
+    
+    if stage == 2:
+        # Stage 2: 가설 생성 (완전 자동)
+        execute_stage2_hypothesis_generation()
+    elif stage == 3:
+        # Stage 3: 감별 질문 생성 (자동)
+        execute_stage3_initial_question()
+    elif stage == 4:
+        # Stage 4: 최종 요약 생성 (자동)
+        execute_stage4_final_summary()
+    # Stage 1은 사용자 입력 대기 (가이드라인 메시지만 표시)
+
+
+def execute_stage2_hypothesis_generation():
+    """
+    Stage 2: 가설 생성 단계 자동 실행
+    사용자 입력 없이 Summary String -> Hypothesis String 생성
+    """
+    print(f"[Stage 2] 자동 가설 생성 시작")
+    
+    # Stage 2 가이드라인 UI 컴포넌트 표시
+    try:
+        from .ui_components import render_stage_guideline_by_stage
+        render_stage_guideline_by_stage(2)
+    except Exception as e:
+        print(f"[Stage 2] 가이드라인 UI 렌더 실패: {e}")
+    
+    stage_handler = st.session_state.stage_handler
+    
+    # Stage 1의 Summary String 가져오기
+    stage1_output = stage_handler.get_stage_output(1)
+    if not stage1_output:
+        print(f"[Stage 2 오류] Stage 1 데이터 없음")
+        add_assistant_message("오류: 이전 단계의 데이터를 찾을 수 없습니다.")
+        return
+    
+    summary_report = stage1_output.get("summary_report", "")
+    
+    # 사용자에게 처리 중임을 알림
+    processing_message = "수집하신 정보를 바탕으로 관련 질환을 검색하고 있습니다. 잠시만 기다려주세요..."
+    add_assistant_message(processing_message)
+    
+    # Stage 2 프롬프트와 컨텍스트 로드
+    prompt_template, context_data = stage_handler.get_stage_materials(2)
+    
+    # Gemini API 호출 (user_input은 비어있음 - 이전 단계 데이터만 사용)
+    response = ask_gemini_with_stage(
+        user_input="",  # Stage 2는 사용자 입력 불필요
+        prompt_template=prompt_template,
+        context_data=context_data,
+        conversation_history=None,  # Stage 2는 히스토리 불필요
+        previous_stage_data=stage1_output
+    )
+    
+    # 응답 검증
+    if not response or response.strip() == "":
+        print(f"[Stage 2 오류] 빈 응답이 반환되었습니다!")
+        add_assistant_message("가설 생성 중 오류가 발생했습니다. 다시 시도해주세요.")
+        return
+    
+    # 응답 파싱
+    user_message, internal_data = parse_ai_response(response)
+    
+    # 내부 데이터 확인 및 저장
+    transition_data = internal_data if internal_data else response
+    
+    if "Hypothesis String:" in transition_data:
+        # Hypothesis String 저장
+        stage_handler.save_stage_output(2, {
+            "hypothesis_report": transition_data
+        })
+        
+        print(f"[Stage 2] 가설 생성 완료 - Stage 3으로 자동 전환")
+        
+        # Stage 3로 자동 전환
+        stage_handler.move_to_next_stage()
+        
+        # Stage 3 가이드라인 UI 컴포넌트 표시
+        try:
+            from .ui_components import render_stage_guideline_by_stage
+            render_stage_guideline_by_stage(3)
+        except Exception as e:
+            print(f"[Stage 3] 가이드라인 UI 렌더 실패: {e}")
+        
+        # Stage 3 초기 행동 실행 (감별 질문 생성)
+        execute_stage3_initial_question()
+    else:
+        print(f"[Stage 2 오류] Hypothesis String 생성 실패")
+        add_assistant_message("가설 생성 중 오류가 발생했습니다. 다시 시도해주세요.")
+
+
+def execute_stage3_initial_question():
+    """
+    Stage 3: 감별 질문 자동 생성 및 제시
+    Hypothesis String -> 감별 질문 생성
+    """
+    print(f"[Stage 3] 감별 질문 생성 시작")
+    
+    # Stage 3 가이드라인 UI 컴포넌트 표시
+    try:
+        from .ui_components import render_stage_guideline_by_stage
+        render_stage_guideline_by_stage(3)
+    except Exception as e:
+        print(f"[Stage 3] 가이드라인 UI 렌더 실패: {e}")
+    
+    stage_handler = st.session_state.stage_handler
+    
+    # Stage 2의 Hypothesis String 가져오기
+    stage2_output = stage_handler.get_stage_output(2)
+    if not stage2_output:
+        print(f"[Stage 3 오류] Stage 2 데이터 없음")
+        add_assistant_message("오류: 가설 데이터를 찾을 수 없습니다.")
+        return
+    
+    # Stage 3 프롬프트와 컨텍스트 로드
+    prompt_template, context_data = stage_handler.get_stage_materials(3)
+    
+    # 감별 질문 생성 (첫 번째 호출)
+    response = ask_gemini_with_stage(
+        user_input="감별 질문을 생성해주세요.",  # 질문 생성 트리거
+        prompt_template=prompt_template,
+        context_data=context_data,
+        conversation_history=get_conversation_history(),
+        previous_stage_data=stage2_output
+    )
+    
+    # 응답 검증
+    if not response or response.strip() == "":
+        print(f"[Stage 3 오류] 빈 응답이 반환되었습니다!")
+        add_assistant_message("감별 질문 생성 중 오류가 발생했습니다.")
+        return
+    
+    # 사용자에게 감별 질문 표시
+    user_message, internal_data = parse_ai_response(response)
+    if user_message:
+        add_assistant_message(user_message)
+        print(f"[Stage 3] 감별 질문 생성 완료 - 사용자 응답 대기")
+    else:
+        print(f"[Stage 3 오류] 감별 질문 생성 실패")
+
+
+def execute_stage4_final_summary():
+    """
+    Stage 4: 최종 요약 및 솔루션 자동 생성
+    Validated String + Stage 1 Summary -> Final Response
+    """
+    print(f"[Stage 4] 최종 요약 생성 시작")
+    
+    # Stage 4 가이드라인 UI 컴포넌트 표시
+    try:
+        from .ui_components import render_stage_guideline_by_stage
+        render_stage_guideline_by_stage(4)
+    except Exception as e:
+        print(f"[Stage 4] 가이드라인 UI 렌더 실패: {e}")
+    
+    stage_handler = st.session_state.stage_handler
+    
+    # Stage 1과 Stage 3 데이터 가져오기
+    stage1_output = stage_handler.get_stage_output(1)
+    stage3_output = stage_handler.get_stage_output(3)
+    
+    if not stage1_output or not stage3_output:
+        print(f"[Stage 4 오류] 이전 단계 데이터 없음")
+        add_assistant_message("오류: 이전 단계의 데이터를 찾을 수 없습니다.")
+        return
+    
+    # 사용자에게 처리 중임을 알림
+    processing_message = "최종 분석 결과와 맞춤형 솔루션을 준비하고 있습니다..."
+    add_assistant_message(processing_message)
+    
+    # Stage 4 프롬프트와 컨텍스트 로드
+    prompt_template, context_data = stage_handler.get_stage_materials(4)
+    
+    # 통합 데이터 준비
+    previous_stage_data = {
+        "stage1_summary": stage1_output.get("summary_report", ""),
+        "stage3_validation": stage3_output.get("validation_result", "")
+    }
+    
+    # 최종 요약 생성
+    response = ask_gemini_with_stage(
+        user_input="",  # Stage 4는 사용자 입력 불필요
+        prompt_template=prompt_template,
+        context_data=context_data,
+        conversation_history=get_conversation_history(),
+        previous_stage_data=previous_stage_data
+    )
+    
+    # 응답 검증
+    if not response or response.strip() == "":
+        print(f"[Stage 4 오류] 빈 응답이 반환되었습니다!")
+        add_assistant_message("최종 요약 생성 중 오류가 발생했습니다.")
+        return
+    
+    # 최종 응답 파싱 및 표시
+    user_message, internal_data = parse_ai_response(response)
+    if user_message:
+        add_assistant_message(user_message)
+        print(f"[Stage 4] 최종 요약 생성 완료")
+        
+        # 추가 질문 안내
+        add_assistant_message("추가로 궁금하신 점이 있으시면 언제든 말씀해주세요.")
+    else:
+        print(f"[Stage 4 오류] 최종 요약 생성 실패")
+
+
+# 사용자 입력을 처리하고 AI 응답 생성
+# 현재 단계에 맞는 프롬프트와 컨텍스트를 사용
 def process_user_input(user_input):
-    """
-    사용자 입력을 처리하고 AI 응답 생성
-    현재 단계에 맞는 프롬프트와 컨텍스트를 사용
-    """
+
     add_user_message(user_input)
     
     # StageHandler 가져오기
@@ -242,24 +453,19 @@ def process_user_input(user_input):
                 "user_visible_message": user_message
             })
         
+        # 다음 단계로 이동
         stage_handler.move_to_next_stage()
-        
-        # 다음 단계의 가이드라인 메시지 추가
         next_stage = stage_handler.get_current_stage()
-        guideline_message = get_stage_guideline_message(next_stage)
-        if guideline_message:
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": guideline_message,
-                "is_guideline": True,
-                "stage": next_stage
-            })
+        
+        # 다음 단계의 가이드라인은 별도의 UI 컴포넌트로 렌더링됨 (채팅 메시지로 추가하지 않음)
+        
+        # ★★★ 핵심: 다음 단계의 초기 행동 자동 실행 ★★★
+        execute_stage_initial_action(next_stage)
     
     return user_message if user_message else "분석 중입니다..."
 
-
+# 현재 단계 정보 반환
 def get_current_stage_info():
-    """현재 단계 정보 반환"""
     if "stage_handler" not in st.session_state:
         return None
     

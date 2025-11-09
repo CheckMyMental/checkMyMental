@@ -162,6 +162,21 @@ class StageHandler:
         """이전 단계의 출력 데이터 가져오기"""
         return st.session_state.stage_data.get(f"stage_{stage}")
     
+    def get_stage_behavior(self, stage: int) -> str:
+        """
+        각 단계의 행동 타입 반환
+        - 'interactive': 사용자 입력 필요 (일반 대화)
+        - 'auto': 자동 처리 (사용자 입력 없이 진행)
+        - 'auto_then_interactive': 자동 처리 후 사용자 대화
+        """
+        behaviors = {
+            1: 'interactive',           # 사용자와 대화하며 정보 수집
+            2: 'auto',                  # 자동으로 RAG 검색 및 가설 생성
+            3: 'auto_then_interactive', # 감별 질문 생성 후 사용자 대화
+            4: 'auto'                   # 최종 요약 자동 생성
+        }
+        return behaviors.get(stage, 'interactive')
+    
     def should_transition(self, response: str, conversation_history: list = None) -> bool:
         """
         AI 응답을 분석해서 다음 단계로 넘어갈지 판단

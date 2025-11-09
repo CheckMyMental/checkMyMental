@@ -164,3 +164,29 @@ def render_stage_guideline():
 
     # Streamlit info 박스 스타일로 표시
     st.markdown(html_content, unsafe_allow_html=True)
+
+
+def render_stage_guideline_by_stage(stage: int):
+    """입력된 단계 번호에 맞는 가이드라인을 표시"""
+    from .stage_guidelines import STAGE_GUIDELINES
+    
+    guideline = STAGE_GUIDELINES.get(stage)
+    if not guideline:
+        return
+    
+    what_to_do_items = "".join([f"<li>{item}</li>" for item in guideline["what_to_do"]])
+    tips_items = "".join([f"<li>{item}</li>" for item in guideline["tips"]])
+    
+    html_content = f"""<div style="background: linear-gradient(135deg, {guideline["color"]}15 0%, {guideline["color"]}05 100%); border-left: 4px solid {guideline["color"]}; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
+    <h4 style="color: {guideline["color"]}; margin-top: 0;">{guideline["title"]}</h4>
+    <p style="color: #666; margin-bottom: 1rem;">{guideline["description"]}</p>
+    <div style="margin-bottom: 0.5rem;">
+        <strong style="color: {guideline["color"]};">이 단계에서 할 일:</strong>
+        <ul style="margin-top: 0.5rem;">{what_to_do_items}</ul>
+    </div>
+    <div>
+        <strong style="color: {guideline["color"]};">💡 유의사항:</strong>
+        <ul style="margin-top: 0.5rem;">{tips_items}</ul>
+    </div>
+</div>"""
+    st.markdown(html_content, unsafe_allow_html=True)

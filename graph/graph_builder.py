@@ -9,9 +9,15 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from .edges import should_continue_intake, should_continue_validation
+from .edges import (
+    route_after_validation,
+    should_continue_intake,
+    should_continue_severity,
+    should_continue_validation,
+)
 from .nodes.hypothesis import hypothesis_node
 from .nodes.intake import intake_node
+from .nodes.severity import severity_assessment_node
 from .nodes.solution import solution_node
 from .nodes.validation import (
     validation_collect_node,
@@ -39,10 +45,13 @@ def build_counseling_graph():
     workflow.add_node("validation_question", validation_question_node)
     workflow.add_node("validation_collect", validation_collect_node)
     workflow.add_node("validation_finalize", validation_finalize_node)
+    workflow.add_node("severity_assessment", severity_assessment_node)
     workflow.add_node("solution", solution_node)
 
     workflow.set_entry_point("intake")
 
+
+    # 엣지 등록
     # Stage 1: intake ↔ hypothesis
     workflow.add_conditional_edges(
         "intake",
@@ -67,8 +76,25 @@ def build_counseling_graph():
         },
     )
 
-    # Stage 4 및 종료
-    workflow.add_edge("validation_finalize", "solution")
+    # Stage 4 (severity) 및 Stage 5 (solution)
+    workflow.add_conditional_edges(
+        "validation_finalize",
+        route_after_validation,
+        {
+            "severity_assessment": "severity_assessment",
+            "solution": "solution",
+        },
+    )
+
+    workflow.add_conditional_edges(
+        "severity_assessment",
+        should_continue_severity,
+        {
+            "severity_assessment": "severity_assessment",
+            "solution": "solution",
+        },
+    )
+
     workflow.add_edge("solution", END)
 
     return workflow.compile()

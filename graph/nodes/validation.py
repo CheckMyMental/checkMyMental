@@ -8,6 +8,8 @@ TODO:
 
 from __future__ import annotations
 
+from typing import Dict, List
+
 from ..state import CounselingState
 
 
@@ -19,6 +21,11 @@ def validation_question_node(state: CounselingState) -> CounselingState:
     updated_state.setdefault("validation_questions", [])
     updated_state.setdefault("current_question_index", 0)
     updated_state.setdefault("next_action", "continue")
+    updated_state.setdefault("diagnosis_candidates", [])
+
+    # 균등 질문 분배 정보 초기화
+    updated_state.setdefault("validation_question_plan", {})
+    updated_state.setdefault("validation_scores", {})
 
     return updated_state
 
@@ -43,6 +50,10 @@ def validation_finalize_node(state: CounselingState) -> CounselingState:
     updated_state: CounselingState = dict(state)
     updated_state["next_action"] = "continue"
     updated_state.setdefault("validated_diagnosis", "")
+    updated_state.setdefault("severity_required", False)
+    updated_state.setdefault("severity_level", "")
+    updated_state.setdefault("validated_scores", {})
+    updated_state["next_action"] = "continue"
 
     return updated_state
 

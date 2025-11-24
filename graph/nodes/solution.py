@@ -1,5 +1,5 @@
 """
-Stage 4 (solution/summary) 노드 스켈레톤.
+Stage 5 (solution/summary) 노드 스켈레톤.
 
 TODO:
     - `frontend/rag_handler.process_stage4_rag_solution`과
@@ -17,6 +17,8 @@ def solution_node(state: CounselingState) -> CounselingState:
     updated_state: CounselingState = dict(state)
     updated_state["current_stage"] = "solution"
     updated_state.setdefault("final_response", "")
+    updated_state.setdefault("rag_solution_results", {})
+    updated_state.setdefault("symptoms_summary", "")
     updated_state["next_action"] = "end"
 
     return updated_state

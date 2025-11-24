@@ -7,6 +7,7 @@
 
 from .intake import intake_node
 from .hypothesis import hypothesis_node
+from .severity import severity_assessment_node
 from .solution import solution_node
 from .validation import (
     validation_collect_node,
@@ -20,6 +21,7 @@ __all__ = [
     "validation_question_node",
     "validation_collect_node",
     "validation_finalize_node",
+    "severity_assessment_node",
     "solution_node",
 ]
 

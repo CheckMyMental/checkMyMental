@@ -26,12 +26,21 @@ class CounselingState(TypedDict, total=False):
 
     # 공통 메타 정보
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    current_stage: Literal["intake", "hypothesis", "validation", "solution"]
+    current_stage: Literal[
+        "intake",
+        "hypothesis",
+        "validation",
+        "severity_assessment",
+        "solution",
+    ]
     next_action: Literal["continue", "wait_user", "end"]
 
     # Stage 1: intake
     turn_count: int
     summary_report: str
+    intake_required_fields: Dict[str, object]
+    intake_progress: Dict[str, object]
+    intake_missing_fields: List[str]
 
     # Stage 2: hypothesis
     rag_diagnosis_results: Dict[str, object]
@@ -44,7 +53,15 @@ class CounselingState(TypedDict, total=False):
     user_answers: Dict[str, str]
     validated_diagnosis: str
 
-    # Stage 4: solution
+    # Stage 4: severity assessment
+    severity_required: bool
+    severity_survey_id: str
+    severity_responses: Dict[str, object]
+    severity_score: str
+    severity_level: str
+
+    # Stage 5: solution
     rag_solution_results: Dict[str, object]
     final_response: str
+    symptoms_summary: str
 

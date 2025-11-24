@@ -1,17 +1,29 @@
-
+# UI 및 웹 프레임워크
 streamlit>=1.28.0
-google-generativeai>=0.3.0
-python-dotenv>=1.0.0
-black>=24.0.0 # 코드 포맷팅 도구
-httpx>=0.24.0  # RAG API 호출용
+fastapi>=0.104.0
+uvicorn>=0.24.0
 
-chromadb
-langchain
-pdfplumber
-python-dotenv
-einops
-uvicorn
-fastapi
-langchain
-langchain_community
-sentence-transformers
+# AI/LLM 관련
+google-generativeai>=0.3.0
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.20
+langchain-google-genai>=0.0.6  # Gemini 통합용 (선택사항)
+langgraph>=0.2.0  # Langraph 핵심 패키지
+
+# RAG 및 벡터 DB
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
+# 문서 처리
+pdfplumber>=0.10.0
+
+# HTTP 클라이언트
+httpx>=0.24.0
+
+# 유틸리티
+python-dotenv>=1.0.0
+einops>=0.7.0
+
+# 개발 도구
+black>=24.0.0  # 코드 포맷팅 도구

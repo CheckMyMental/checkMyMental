@@ -11,7 +11,7 @@ from graph.edges import (
     check_severity_complete
 )
 
-def build_graph():
+def build_graph(checkpointer=None):
     """
     상담 프로세스 전체 그래프 구성
     
@@ -78,9 +78,8 @@ def build_graph():
     workflow.add_edge("solution", END)
     
     # 4. 그래프 컴파일
-    # 메모리(Checkpointer)는 외부에서 주입하거나 여기서 설정 가능
-    # 여기서는 순수 그래프 구조만 반환
-    return workflow.compile()
+    # 메모리(Checkpointer)는 외부에서 주입
+    return workflow.compile(checkpointer=checkpointer)
 
 # 그래프 인스턴스 생성 (import해서 사용 가능)
 graph = build_graph()

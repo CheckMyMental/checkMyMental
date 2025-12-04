@@ -1,0 +1,22 @@
+{
+  "purpose": "Validation 단계에서 모든 의심 질환의 확률이 50% 이하일 때, 진단 정확도를 높이기 위해 추가 정보를 수집합니다.",
+  "strategies": [
+    {
+      "type": "Clarification (명확화)",
+      "description": "이전 답변 중 모호하거나 불충분했던 부분에 대해 다시 질문합니다.",
+      "example": "아까 '기분이 안 좋다'고 하셨는데, 구체적으로 어떤 느낌인지(슬픔, 화, 불안 등) 말씀해 주실 수 있나요?"
+    },
+    {
+      "type": "Expansion (확장)",
+      "description": "초기 Intake에서 다루지 않았던 다른 증상이나 도메인에 대해 탐색합니다.",
+      "example": "혹시 수면이나 식사 외에 신체적인 불편함이나 다른 걱정거리는 없으신가요?"
+    },
+    {
+      "type": "Contextualization (맥락 파악)",
+      "description": "증상이 발생한 상황이나 유발 요인에 대해 더 자세히 묻습니다.",
+      "example": "그 증상이 특정 시간대나 상황에서 더 심해지나요?"
+    }
+  ],
+  "goal": "새로운 단서를 발견하여 Intake Summary Report를 보강하고, 다시 Hypothesis 단계로 진입하여 더 정확한 질환 후보를 도출하는 것."
+}
+

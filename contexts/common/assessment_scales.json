@@ -1,0 +1,63 @@
+{
+  "depressionseverity": {
+    "scale_name": "PHQ-9 (Patient Health Questionnaire-9)",
+    "description": "우울증 선별 및 심각도 평가 척도",
+    "score_ranges": [
+      { "range": "0-4", "level": "None-minimal", "interpretation": "우울 증상이 거의 없음" },
+      { "range": "5-9", "level": "Mild", "interpretation": "가벼운 우울 증상" },
+      { "range": "10-14", "level": "Moderate", "interpretation": "중간 정도의 우울 증상" },
+      { "range": "15-19", "level": "Moderately Severe", "interpretation": "약간 심한 우울 증상" },
+      { "range": "20-27", "level": "Severe", "interpretation": "심한 우울 증상" }
+    ],
+    "items": [
+      "일이나 취미에 대한 흥미나 즐거움 감소",
+      "기분이 가라앉거나 우울하거나 절망적임",
+      "잠들기 어렵거나 자꾸 깨거나 너무 많이 잠",
+      "피곤하다고 느끼거나 기력이 없음",
+      "식욕 부진 또는 과식",
+      "자신을 실패자라고 느끼거나 자신과 가족을 실망시켰다고 느낌",
+      "신문을 읽거나 TV를 볼 때 집중하기 어려움",
+      "행동이 느려지거나 안절부절못함",
+      "차라리 죽는 게 낫겠다고 생각하거나 자해할 생각을 함"
+    ]
+  },
+  "anxietyseverity": {
+    "scale_name": "GAD-7 (Generalized Anxiety Disorder-7)",
+    "description": "불안 장애 선별 및 심각도 평가 척도",
+    "score_ranges": [
+      { "range": "0-4", "level": "Minimal", "interpretation": "불안 증상이 거의 없음" },
+      { "range": "5-9", "level": "Mild", "interpretation": "가벼운 불안 증상" },
+      { "range": "10-14", "level": "Moderate", "interpretation": "중간 정도의 불안 증상" },
+      { "range": "15-21", "level": "Severe", "interpretation": "심한 불안 증상" }
+    ],
+    "items": [
+      "안절부절못하거나 긴장되거나 과민함",
+      "걱정을 멈추거나 조절할 수 없음",
+      "여러 가지 일에 대해 너무 많이 걱정함",
+      "긴장을 풀기 어려움",
+      "너무 안절부절못해 가만히 있기 어려움",
+      "쉽게 짜증이 나거나 화가 남",
+      "마치 끔찍한 일이 일어날 것처럼 두려움"
+    ]
+  },
+  "insomniaseverity": {
+    "scale_name": "ISI (Insomnia Severity Index)",
+    "description": "불면증 심각도 평가 척도",
+    "score_ranges": [
+      { "range": "0-7", "level": "No clinically significant insomnia", "interpretation": "임상적으로 유의미하지 않음" },
+      { "range": "8-14", "level": "Subthreshold insomnia", "interpretation": "경계선 수준의 불면증" },
+      { "range": "15-21", "level": "Clinical insomnia (moderate)", "interpretation": "임상적 불면증 (중등도)" },
+      { "range": "22-28", "level": "Clinical insomnia (severe)", "interpretation": "임상적 불면증 (심각)" }
+    ],
+    "items": [
+      "잠들기 어려움",
+      "잠을 유지하기 어려움",
+      "너무 일찍 깸",
+      "수면 패턴에 대한 만족도",
+      "수면 문제가 일상생활에 미치는 영향",
+      "수면 문제로 인한 타인의 인지 정도",
+      "수면 문제에 대한 걱정 및 고통"
+    ]
+  }
+}
+

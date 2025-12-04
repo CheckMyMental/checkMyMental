@@ -1,0 +1,71 @@
+{
+  "domains": [
+    {
+      "domain_name": "Depressive Disorders (우울 장애)",
+      "keywords": ["우울", "슬픔", "흥미 저하", "무기력", "자살 사고"],
+      "follow_up_guide": "우울감이 얼마나 깊은지, 자해나 자살에 대한 생각이 있는지 구체적으로 확인."
+    },
+    {
+      "domain_name": "Anxiety Disorders (불안 장애)",
+      "keywords": ["불안", "걱정", "공황", "두려움", "긴장"],
+      "follow_up_guide": "불안을 유발하는 특정 상황이 있는지, 신체적 증상(심장 두근거림 등)이 동반되는지 확인."
+    },
+    {
+      "domain_name": "Bipolar and Related Disorders (양극성 장애)",
+      "keywords": ["조증", "기분 변화", "과도한 에너지", "충동적 행동"],
+      "follow_up_guide": "기분이 비정상적으로 들뜨거나 에너지가 넘쳤던 기간이 있었는지 확인."
+    },
+    {
+      "domain_name": "Schizophrenia Spectrum (조현병 스펙트럼)",
+      "keywords": ["환청", "망상", "현실감 상실", "와해된 언어"],
+      "follow_up_guide": "남들이 듣지 못하는 소리를 듣거나, 사실이 아닌 것을 믿는 경험이 있는지 조심스럽게 확인."
+    },
+    {
+      "domain_name": "Trauma- and Stressor-Related Disorders (외상 및 스트레스 관련 장애)",
+      "keywords": ["트라우마", "외상", "악몽", "플래시백", "과각성"],
+      "follow_up_guide": "과거에 충격적인 사건을 겪은 적이 있는지, 그 기억이 현재 생활에 영향을 주는지 확인."
+    },
+    {
+      "domain_name": "Obsessive-Compulsive and Related Disorders (강박 장애)",
+      "keywords": ["강박", "반복 행동", "침투적 사고", "확인 행동"],
+      "follow_up_guide": "원하지 않는 생각이 반복되거나, 불안을 줄이기 위해 특정 행동을 반복하는지 확인."
+    },
+    {
+      "domain_name": "Feeding and Eating Disorders (급식 및 섭식 장애)",
+      "keywords": ["폭식", "거식", "체중 강박", "구토"],
+      "follow_up_guide": "식사 습관에 변화가 있는지, 체중이나 체형에 대한 과도한 걱정이 있는지 확인."
+    },
+    {
+      "domain_name": "Sleep-Wake Disorders (수면 장애)",
+      "keywords": ["불면", "과다 수면", "수면 무호흡", "악몽"],
+      "follow_up_guide": "잠드는 데 어려움이 있거나, 자다 깨는 일이 잦은지, 혹은 너무 많이 자는지 확인."
+    },
+    {
+      "domain_name": "Substance-Related and Addictive Disorders (물질 관련 및 중독 장애)",
+      "keywords": ["알코올", "약물", "도박", "중독", "금단"],
+      "follow_up_guide": "술, 담배, 약물 사용 빈도나 도박 등으로 인해 문제가 발생한 적이 있는지 확인."
+    },
+    {
+      "domain_name": "Neurocognitive Disorders (신경인지 장애)",
+      "keywords": ["기억력 저하", "인지 저하", "치매", "혼란"],
+      "follow_up_guide": "최근 기억력이 급격히 나빠지거나, 익숙한 일을 처리하는 데 어려움이 있는지 확인."
+    },
+    {
+      "domain_name": "Personality Disorders (성격 장애)",
+      "keywords": ["대인관계 문제", "감정 불안정", "충동성", "고립"],
+      "follow_up_guide": "대인관계에서 반복되는 갈등 패턴이나, 감정 조절의 어려움이 장기간 지속되었는지 확인."
+    },
+    {
+      "domain_name": "Somatic Symptom and Related Disorders (신체 증상 장애)",
+      "keywords": ["신체 통증", "건강 염려", "원인 모를 통증"],
+      "follow_up_guide": "의학적으로 설명되지 않는 신체 증상이 지속되거나, 건강에 대한 과도한 걱정이 있는지 확인."
+    },
+    {
+      "domain_name": "Disruptive, Impulse-Control, and Conduct Disorders (파괴적, 충동조절 및 품행 장애)",
+      "keywords": ["분노 조절", "충동적", "공격성", "규범 위반"],
+      "follow_up_guide": "화가 났을 때 감정을 조절하기 어렵거나, 충동적으로 행동하여 후회한 적이 있는지 확인."
+    }
+  ],
+  "instructions": "대화 중 위 13개 도메인과 관련된 키워드나 징후가 발견되면, 해당 도메인의 'follow_up_guide'를 참고하여 추가 질문을 하세요. 이를 통해 필수 정보를 더욱 구체화합니다."
+}
+

@@ -1,0 +1,26 @@
+{
+  "purpose": "가장 유력한 단일 질환(Top 1)에 대해 증상의 심각도를 정량적으로 평가합니다.",
+  "assessment_flow": [
+    {
+      "step": 1,
+      "action": "Load Context",
+      "detail": "해당 질환에 특화된 심각도 척도(Severity Scale)나 가이드라인(예: PHQ-9 for Depression, GAD-7 for Anxiety)을 로드합니다."
+    },
+    {
+      "step": 2,
+      "action": "Generate Questions",
+      "detail": "척도 항목을 기반으로 사용자에게 질문을 생성합니다. 이미 이전 단계에서 충분히 답변된 내용은 제외하거나 확인 차원에서 간략히 물을 수 있습니다."
+    },
+    {
+      "step": 3,
+      "action": "Calculate Score",
+      "detail": "사용자 응답을 점수화(Scoring)하여 총점을 계산하고, 심각도 등급(예: Mild, Moderate, Severe)을 판정합니다."
+    }
+  ],
+  "output_format": {
+    "severity_level": "String (e.g., 'Severe Depression')",
+    "score_summary": "String (e.g., 'Score: 18/27')",
+    "clinical_implication": "String (e.g., '적극적인 치료가 권장되는 수준입니다.')"
+  }
+}
+

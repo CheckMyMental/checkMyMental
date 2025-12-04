@@ -1,881 +1,124 @@
-# 채팅 히스토리 관리 및 메시지 처리 모듈
 import streamlit as st
-import re
-import difflib
-from .gemini_api import ask_gemini, ask_gemini_with_stage
-from .stage_handler import StageHandler
+from langchain_core.messages import HumanMessage, AIMessage
 
-
-def parse_ai_response(response: str) -> tuple:
-    """
-    AI 응답을 사용자 표시 부분과 내부 데이터로 분리
-    
-    응답 형식:
-    [사용자에게 보여질 응답]
-    
-    ---INTERNAL_DATA---
-    Summary String:
-    [다음 단계로 전달될 구조화된 데이터]
-    
-    Returns:
-        (user_message, internal_data)
-        - user_message: 사용자에게 표시할 메시지
-        - internal_data: 다음 단계로 전달할 내부 데이터 (Summary String 등)
-    """
-    # ---INTERNAL_DATA--- 구분자로 분리
-    if "---INTERNAL_DATA---" in response:
-        parts = response.split("---INTERNAL_DATA---")
-        user_message = parts[0].strip()
-        internal_data = parts[1].strip() if len(parts) > 1 else ""
-        
-        print(f"[응답 파싱] 사용자 메시지: {len(user_message)} 문자")
-        print(f"[응답 파싱] 내부 데이터: {len(internal_data)} 문자")
-        
-        return user_message, internal_data
-    
-    # 구분자가 없으면 전체를 사용자 메시지로 처리
-    # (Summary String 등이 없는 일반 대화 응답)
-    return response.strip(), ""
-
-
-def remove_system_tags(response: str) -> str:
-    """
-    시스템 내부 처리용 태그를 제거하여 사용자에게 표시할 내용만 반환
-    (레거시 함수 - parse_ai_response 사용 권장)
-    """
-    # 각 태그 패턴을 찾아서 태그와 콜론만 제거 (내용은 유지)
-    patterns = [
-        r'Summary String:\s*',
-        r'Hypothesis String:\s*',
-        r'Validated String:\s*',
-        r'Final Response String:\s*',
-    ]
-    
-    cleaned = response
-    for pattern in patterns:
-        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-    
-    # 앞뒤 공백 제거
-    return cleaned.strip()
-
-
-def _parse_stage3_questions(response_text: str) -> list:
-    """
-    LLM 응답에서 Stage 3 질문 리스트 파싱
-    
-    예상 형식:
-    Q1. 질문 텍스트...
-    Q2. 질문 텍스트...
-    Q3. 질문 텍스트...
-    
-    Returns:
-        [{"id": "Q1", "text": "질문 텍스트"}, ...]
-    """
-    if not response_text:
-        return []
-    
-    questions = []
-    # Q1., Q2., Q3. 형태의 질문을 파싱
-    pattern = re.compile(r'^(Q\d+)\.\s*(.+?)$', flags=re.MULTILINE)
-    matches = pattern.findall(response_text)
-    
-    for match in matches:
-        question_id = match[0]
-        question_text = match[1].strip()
-        
-        # 참고 정보가 있으면 제거 (괄호 안의 "참고: ..." 부분)
-        # 예: "(참고: 주요 우울 장애의 진단 기준 A(2) - ...)"
-        question_text = re.sub(r'\s*\(참고:.*?\)\s*$', '', question_text, flags=re.IGNORECASE)
-        
-        if question_text:
-            questions.append({
-                "id": question_id,
-                "text": question_text
-            })
-    
-    return questions
-
-
-def _extract_top_diagnosis_candidates(hypothesis_report: str) -> list:
-    """
-    Stage 2의 'Hypothesis String' 포맷에서 Top N 후보 질환명을 추출
-    예상 포맷 (예시):
-      1. [질환명 1] (확률: ...):
-      2. [질환명 2] (확률: ...):
-      3. [질환명 3] (확률: ...):
-    """
-    if not hypothesis_report:
-        return []
-    
-    # "Hypothesis String:" 이후의 본문만 대상으로 처리 (있으면)
-    if "Hypothesis String:" in hypothesis_report:
-        hypothesis_report = hypothesis_report.split("Hypothesis String:", 1)[1]
-    
-    # 줄 단위로 후보 라인을 탐색: "1. 질환명 (" 또는 "1. 질환명 :" 형태
-    pattern = re.compile(r'^\s*\d+\.\s*([^\(:\n]+?)\s*(?:\(|:)', flags=re.MULTILINE)
-    candidates = pattern.findall(hypothesis_report)
-    
-    # 후처리: 좌우 공백 제거
-    candidates = [c.strip() for c in candidates if c and c.strip()]
-    return candidates
-
-
-def _normalize_validated_to_candidates(validated_text: str, candidates: list) -> str:
-    """
-    Validated String 텍스트에서 선택된 질환명을 추출한 뒤,
-    Stage 2 후보 리스트 중 '정확히 동일한 문자열'로 정규화하여 반환.
-    - 대소문자/공백 차이는 허용하여 매칭하되, 반환은 원본 후보 문자열 그대로 사용
-    - 필요 시 유사도(difflib)로 근접 후보를 선택 (cutoff=0.6)
-    """
-    if not validated_text:
-        return ""
-    
-    # "Validated String:" 이후 내용을 추출
-    chosen = validated_text
-    if "Validated String:" in validated_text:
-        parts = validated_text.split("Validated String:", 1)
-        chosen = parts[1] if len(parts) > 1 else validated_text
-    
-    # 첫 번째 비어있지 않은 라인만 채택
-    chosen_line = ""
-    for line in chosen.splitlines():
-        stripped = line.strip()
-        if stripped:
-            chosen_line = stripped
-            break
-    
-    # 감싸는 따옴표/대괄호 제거
-    chosen_line = chosen_line.strip().strip("[]\"'“”‘’()").strip()
-    if not candidates:
-        return chosen_line
-    
-    # 1) 완전 일치 우선
-    for cand in candidates:
-        if chosen_line == cand:
-            return cand
-    
-    # 2) 대소문자/공백 무시 일치
-    def canon(s: str) -> str:
-        return re.sub(r'\s+', '', s).casefold()
-    chosen_canon = canon(chosen_line)
-    for cand in candidates:
-        if canon(cand) == chosen_canon:
-            return cand
-    
-    # 3) 부분 포함 일치 (양방향 검사, 대소문자 무시)
-    for cand in candidates:
-        if cand.lower() in chosen_line.lower() or chosen_line.lower() in cand.lower():
-            return cand
-    
-    # 4) 근접 일치 (표기 차이/오탈자 보정)
-    close = difflib.get_close_matches(chosen_line, candidates, n=1, cutoff=0.6)
-    if close:
-        return close[0]
-    
-    # 5) 매칭 실패 시 원문 유지
-    return chosen_line
-
-
-def get_stage_guideline_message(stage: int) -> str:
-    """단계별 가이드라인을 Assistant 메시지 형식으로 반환"""
-    from .stage_guidelines import STAGE_GUIDELINES
-    
-    guideline = STAGE_GUIDELINES.get(stage)
-    if not guideline:
-        return ""
-    
-    # 할 일 목록 생성 (마크다운 리스트 형식으로, 각 항목 사이에 빈 줄 추가)
-    what_to_do_list = "\n".join([f"- {item}" for item in guideline['what_to_do']])
-    tips_list = "\n".join([f"- {item}" for item in guideline['tips']])
-    
-    # Assistant 메시지 형식으로 포맷팅 (title은 HTML로 처리하여 크기 조정)
-    # 이모지와 함께 제대로 표시되도록 HTML 사용
-    message = f"""<h3 style="margin-top: 0; margin-bottom: 0.5rem; font-size: 1.3em;">{guideline['title']}</h3>
-
-{guideline['description']}
-
-**이 단계에서 할 일:**
-
-{what_to_do_list}
-
-**💡 유의사항:**
-
-{tips_list}
-"""
-    return message
-
+from .graph_client import get_graph_client
+from .ui_components import render_chat_messages
 
 def init_chat_history():
-    # 채팅 히스토리 초기화
+    """
+    채팅 히스토리 및 관련 상태 초기화
+    """
+    # 1. 메시지 히스토리 초기화 (Streamlit UI용)
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    
-    # StageHandler 초기화
-    if "stage_handler" not in st.session_state:
-        st.session_state.stage_handler = StageHandler()
-    
-    # 초기 가이드라인 메시지 및 인사 메시지 추가 (첫 실행 시에만)
-    if "guideline_added" not in st.session_state:
-        current_stage = st.session_state.stage_handler.get_current_stage()
-        # Stage 1 가이드라인을 채팅 메시지로 추가
-        add_stage_guideline_message(current_stage)
         
-        # 인사 메시지 추가
+        # 초기 인사 메시지 추가
         greeting_message = "안녕하세요! 저는 AI 정신건강 상담 도우미입니다. 오늘 어떤 도움이 필요하신가요? 편하게 말씀해주세요."
         st.session_state.messages.append({
             "role": "assistant",
-            "content": greeting_message,
-            "is_guideline": False
+            "content": greeting_message
         })
-        st.session_state.guideline_added = True
+    
+    # 2. Graph Client 초기화 및 세션 ID 설정
+    if "graph_client" not in st.session_state:
+        st.session_state.graph_client = get_graph_client()
+    
+    if "thread_id" not in st.session_state:
+        st.session_state.thread_id = st.session_state.graph_client.create_thread_id()
+        print(f"[ChatHandler] New session initialized with thread_id: {st.session_state.thread_id}")
 
-
-def add_user_message(content):
-    # 사용자 메시지를 히스토리에 추가
-    st.session_state.messages.append({"role": "user", "content": content})
-
-
-def add_assistant_message(content):
-    # AI 응답을 히스토리에 추가
-    st.session_state.messages.append({"role": "assistant", "content": content})
-
-
-def get_conversation_history(exclude_last=False):
-    # 대화 히스토리 가져오기
-    if exclude_last and len(st.session_state.messages) > 1:
-        return st.session_state.messages[:-1]
-    return st.session_state.messages.copy()
-
-
-def add_stage_guideline_message(stage: int):
+def process_user_input(user_input: str):
     """
-    단계별 가이드라인을 채팅 메시지로 추가 (히스토리에 유지)
+    사용자 입력을 처리하고 Graph를 실행하여 응답을 생성
     
     Args:
-        stage: 단계 번호
+        user_input: 사용자 입력 텍스트
     """
-    from .stage_guidelines import STAGE_GUIDELINES
-    
-    guideline = STAGE_GUIDELINES.get(stage)
-    if not guideline:
+    if not user_input:
         return
-    
-    # 가이드라인 HTML 생성
-    what_to_do_items = "".join([f"<li>{item}</li>" for item in guideline["what_to_do"]])
-    tips_items = "".join([f"<li>{item}</li>" for item in guideline["tips"]])
-    
-    html_content = f"""<div style="background: linear-gradient(135deg, {guideline["color"]}15 0%, {guideline["color"]}05 100%); border-left: 4px solid {guideline["color"]}; padding: 1rem; margin: 1rem 0; border-radius: 8px;">
-    <h4 style="color: {guideline["color"]}; margin-top: 0;">{guideline["title"]}</h4>
-    <p style="color: #666; margin-bottom: 1rem;">{guideline["description"]}</p>
-    <div style="margin-bottom: 0.5rem;">
-        <strong style="color: {guideline["color"]};">이 단계에서 할 일:</strong>
-        <ul style="margin-top: 0.5rem;">{what_to_do_items}</ul>
-    </div>
-    <div>
-        <strong style="color: {guideline["color"]};">💡 유의사항:</strong>
-        <ul style="margin-top: 0.5rem;">{tips_items}</ul>
-    </div>
-</div>"""
-    
-    # 채팅 메시지로 추가 (히스토리에 유지)
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": html_content,
-        "is_guideline": True,
-        "stage": stage
-    })
 
+    # 1. 사용자 메시지 UI 추가
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    # 2. Graph 실행
+    graph_client = st.session_state.graph_client
+    thread_id = st.session_state.thread_id
+    
+    try:
+        # Graph Invoke (Blocking)
+        # 실제 구현에서는 stream_graph를 사용하여 토큰 스트리밍을 구현할 수 있음
+        final_state = graph_client.invoke_graph(user_input, thread_id)
+        
+        # 3. 결과 동기화 (State -> UI)
+        _sync_state_to_ui(final_state)
+        
+    except Exception as e:
+        print(f"[ChatHandler] Error executing graph: {e}")
+        st.error("상담 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
 
-def execute_stage_initial_action(stage: int):
+def _sync_state_to_ui(state: dict):
     """
-    단계 전환 후 초기 행동 자동 실행
+    Graph 실행 결과(State)를 Streamlit UI 세션 상태와 동기화
     
     Args:
-        stage: 전환된 새로운 단계 번호
+        state: 실행 완료된 CounselingState 딕셔너리
     """
-    stage_handler = st.session_state.stage_handler
-    behavior = stage_handler.get_stage_behavior(stage)
+    # 1. 메시지 동기화
+    # LangGraph의 messages는 전체 히스토리이므로, 
+    # Streamlit messages보다 최신인(마지막) 메시지만 추가하거나,
+    # 전체를 다시 매핑하는 방식을 선택할 수 있음.
+    # 여기서는 마지막 AI 메시지를 가져와 추가하는 방식 사용
     
-    # 단계별 가이드라인을 채팅 메시지로 추가 (히스토리에 유지)
-    add_stage_guideline_message(stage)
-
-    print(f"[Stage {stage}] 초기 행동 실행 시작 (behavior: {behavior})")
-    
-    if stage == 2:
-        # Stage 2: 가설 생성 (완전 자동)
-        execute_stage2_hypothesis_generation()
-    elif stage == 3:
-        # Stage 3: 감별 질문 생성 (자동)
-        execute_stage3_initial_question()
-    elif stage == 4:
-        # Stage 4: 최종 요약 생성 (자동)
-        execute_stage4_final_summary()
-    # Stage 1은 사용자 입력 대기 (가이드라인 메시지만 표시)
-
-
-def execute_stage2_hypothesis_generation():
-    """
-    Stage 2: 가설 생성 단계 자동 실행
-    사용자 입력 없이 Summary String -> RAG 검색 -> Hypothesis String 생성
-    """
-    print(f"[Stage 2] 자동 가설 생성 시작")
-    
-    stage_handler = st.session_state.stage_handler
-    
-    # Stage 1의 Summary String 가져오기
-    stage1_output = stage_handler.get_stage_output(1)
-    if not stage1_output:
-        print(f"[Stage 2 오류] Stage 1 데이터 없음")
-        add_assistant_message("오류: 이전 단계의 데이터를 찾을 수 없습니다.")
+    graph_messages = state.get("messages", [])
+    if not graph_messages:
         return
+        
+    last_message = graph_messages[-1]
     
-    summary_report = stage1_output.get("summary_report", "")
-    
-    # 사용자에게 처리 중임을 알림
-    processing_message = "수집하신 정보를 바탕으로 관련 질환을 검색하고 있습니다. 잠시만 기다려주세요..."
-    add_assistant_message(processing_message)
-    
-    # RAG Hypothesis API 호출
-    from .rag_handler import process_stage2_rag_hypothesis
-    
-    rag_result = process_stage2_rag_hypothesis(
-        internal_data=summary_report,
-        top_k=12,
-        diag_top_n=3
-    )
-    
-    if not rag_result:
-        print(f"[Stage 2 오류] RAG 검색 실패")
-        add_assistant_message("질환 검색 중 오류가 발생했습니다. 다시 시도해주세요.")
-        return
-    
-    # RAG 결과를 previous_stage_data에 추가
-    enhanced_stage1_output = {
-        **stage1_output,
-        "rag_result": rag_result
-    }
-    
-    # Stage 2 프롬프트와 컨텍스트 로드
-    prompt_template, context_data = stage_handler.get_stage_materials(2)
-    
-    # Gemini API 호출 (RAG 결과 포함)
-    response = ask_gemini_with_stage(
-        user_input="",  # Stage 2는 사용자 입력 불필요
-        prompt_template=prompt_template,
-        context_data=context_data,
-        conversation_history=None,  # Stage 2는 히스토리 불필요
-        previous_stage_data=enhanced_stage1_output
-    )
-    
-    # 응답 검증
-    if not response or response.strip() == "":
-        print(f"[Stage 2 오류] 빈 응답이 반환되었습니다!")
-        add_assistant_message("가설 생성 중 오류가 발생했습니다. 다시 시도해주세요.")
-        return
-    
-    # 응답 파싱
-    user_message, internal_data = parse_ai_response(response)
-    
-    # 내부 데이터 확인 및 저장
-    transition_data = internal_data if internal_data else response
-
-    print(f"[Stage 2] 내부 데이터: {transition_data}")
-    
-    if "Hypothesis String:" in transition_data:
-        # Hypothesis String 저장
-        stage_handler.save_stage_output(2, {
-            "hypothesis_report": transition_data,
-            # Stage 3에는 깔끔한 진단 기준만 전달
-            "by_diagnosis": rag_result.get("by_diagnosis", {})
+    # 마지막 메시지가 AI 메시지인 경우에만 UI에 추가
+    # (사용자 메시지는 이미 process_user_input 초반에 추가됨)
+    if isinstance(last_message, AIMessage):
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": last_message.content
         })
-        
-        print(f"[Stage 2] 가설 생성 완료 - Stage 3으로 자동 전환")
-        
-        # Stage 3로 자동 전환
-        stage_handler.move_to_next_stage()
-        
-        # Stage 3 가이드라인을 채팅 메시지로 추가
-        add_stage_guideline_message(3)
+    
+    # 2. 단계별 산출물 디버깅용 저장 (선택 사항)
+    # 필요 시 st.session_state에 저장하여 사이드바 등에서 확인 가능
+    if "intake_summary_report" in state:
+        st.session_state.debug_intake_summary = state["intake_summary_report"]
+    if "diagnosis_result" in state: # state.py 필드명 확인 필요 (Validation 결과 등)
+        st.session_state.debug_diagnosis = state.get("diagnosis_result")
 
-        # Stage 3 초기 행동 실행 (감별 질문 생성)
-        execute_stage3_initial_question()
-    else:
-        print(f"[Stage 2 오류] Hypothesis String 생성 실패")
-        add_assistant_message("가설 생성 중 오류가 발생했습니다. 다시 시도해주세요.")
-
-
-def _finalize_stage3_validation() -> str:
-    """
-    Stage 3의 모든 질문이 완료되었을 때 최종 분석 수행
-    
-    Returns:
-        사용자에게 표시할 메시지 (Stage 4로 전환 완료 메시지)
-    """
-    stage_handler = st.session_state.stage_handler
-    
-    # 모든 답변 수집
-    all_answers = stage_handler.get_stage3_all_answers()
-    all_questions = st.session_state.stage3_questions
-    
-    print(f"[Stage 3] 최종 분석 시작 - 총 {len(all_answers)}개 답변 수집")
-    
-    # Stage 2 데이터 가져오기
-    stage2_output = stage_handler.get_stage_output(2)
-    if not stage2_output:
-        print(f"[Stage 3 오류] Stage 2 데이터 없음")
-        add_assistant_message("오류: 이전 단계 데이터를 찾을 수 없습니다.")
-        return "오류가 발생했습니다."
-    
-    # 질문과 답변을 구조화된 형식으로 포맷팅
-    # all_questions는 [{"id": "Q1", "text": "..."}, ...] 형식
-    questions_text = "\n".join([f"{q.get('id', '')}. {q.get('text', '')}" for q in all_questions if isinstance(q, dict)])
-    formatted_answers = "\n".join([f"{qid}: {answer}" for qid, answer in sorted(all_answers.items(), key=lambda x: int(x[0].replace('Q', '')))])
-    
-    # Stage 3 프롬프트와 컨텍스트 로드
-    prompt_template, context_data = stage_handler.get_stage_materials(3)
-    
-    # 최종 분석 요청 (LLM에게 스코어링 및 확정 요청)
-    # 중요: 프롬프트의 "턴 2" 지시사항을 명확히 언급
-    user_input_for_llm = f"""턴 2: 사용자 응답 수신 후 확정 단계입니다.
-
-다음은 이전에 생성한 질문과 사용자가 답변한 Likert 응답입니다:
-
-질문:
-{questions_text}
-
-사용자 답변:
-{formatted_answers}
-
-위 답변을 바탕으로 프롬프트의 "2) 응답 스코어링 및 확률 산출(턴 2)" 지시사항에 따라:
-1. 문항별 점수를 계산하고 (Likert 매핑: 매우 그렇다=+2, 그렇다=+1, 보통이다=0, 약간 그렇지 않다=-1, 매우 그렇지 않다=-2)
-2. 후보별 총점을 집계하고
-3. 확률을 계산하여
-4. 최종 확정 질환명을 선택한 후
-5. 반드시 '---INTERNAL_DATA---' 섹션에 'Validated String:'과 'Validation JSON:'을 포함하여 출력해주세요.
-
-**중요**: 질문을 다시 생성하지 말고, 위 답변을 스코어링하여 최종 진단을 확정하세요."""
-    
-    response = ask_gemini_with_stage(
-        user_input=user_input_for_llm,
-        prompt_template=prompt_template,
-        context_data=context_data,
-        conversation_history=get_conversation_history(),
-        previous_stage_data=stage2_output
-    )
-    
-    # 응답 검증
-    if not response or response.strip() == "":
-        print(f"[Stage 3 오류] 빈 응답이 반환되었습니다!")
-        add_assistant_message("최종 분석 중 오류가 발생했습니다.")
-        return "오류가 발생했습니다."
-    
-    # 응답 파싱
-    user_message, internal_data = parse_ai_response(response)
-    
-    # 내부 데이터 확인
-    transition_data = internal_data if internal_data else response
-    
-    # Validated String 확인
-    if "Validated String:" in transition_data:
-        # Stage 2 후보 중 정확히 동일한 문자열로 정규화
-        try:
-            hypothesis_report = stage2_output.get("hypothesis_report", "")
-            candidates = _extract_top_diagnosis_candidates(hypothesis_report)
-            normalized_choice = _normalize_validated_to_candidates(transition_data, candidates)
-            final_validated_string = f"Validated String:\n{normalized_choice}"
-            
-            # Stage 3 데이터 저장
-            stage_handler.save_stage_output(3, {
-                "validation_result": final_validated_string,
-                "questions": all_questions,
-                "answers": all_answers
-            })
-            
-            print(f"[Stage 3] 최종 진단 확정: {normalized_choice}")
-            
-            # 사용자에게는 메시지를 표시하지 않고 바로 Stage 4로 전환
-            print(f"[Stage 3] Stage 4로 자동 전환")
-            stage_handler.move_to_next_stage()
-            
-            # Stage 4 초기 행동 실행 (최종 요약 생성)
-            execute_stage_initial_action(4)
-            
-            return "분석이 완료되었습니다."
-        except Exception as e:
-            print(f"[Stage 3 오류] Validated String 처리 실패: {e}")
-            add_assistant_message("최종 분석 중 오류가 발생했습니다.")
-            return "오류가 발생했습니다."
-    else:
-        print(f"[Stage 3 오류] Validated String 생성 실패")
-        add_assistant_message("최종 진단 확정 중 오류가 발생했습니다.")
-        return "오류가 발생했습니다."
-
-
-def _handle_stage3_answer(user_input: str) -> str:
-    """
-    Stage 3에서 사용자의 Likert 응답 처리
-    
-    Args:
-        user_input: 사용자의 답변
-        
-    Returns:
-        표시할 메시지 (다음 질문 또는 완료 메시지)
-    """
-    stage_handler = st.session_state.stage_handler
-    
-    # 현재 질문 가져오기
-    current_question = stage_handler.get_stage3_current_question()
-    if not current_question:
-        print(f"[Stage 3 오류] 현재 질문을 찾을 수 없습니다.")
-        add_assistant_message("오류: 질문 정보를 찾을 수 없습니다.")
-        return "오류가 발생했습니다."
-    
-    # Likert 응답 검증
-    valid_answers = ["매우 그렇다", "그렇다", "보통이다", "약간 그렇지 않다", "매우 그렇지 않다"]
-    user_answer = user_input.strip()
-    
-    # 유연한 매칭 (대소문자 무시, 공백 정규화)
-    normalized_input = re.sub(r'\s+', '', user_answer).lower()
-    matched_answer = None
-    for valid_answer in valid_answers:
-        normalized_valid = re.sub(r'\s+', '', valid_answer).lower()
-        if normalized_valid == normalized_input or valid_answer in user_answer:
-            matched_answer = valid_answer
-            break
-    
-    if not matched_answer:
-        # 유효하지 않은 응답
-        error_message = f"올바른 응답 형식이 아닙니다.\n\n다음 중 하나로 응답해주세요: {' / '.join(valid_answers)}"
-        add_assistant_message(error_message)
-        return error_message
-    
-    # 답변 저장
-    question_id = current_question['id']
-    stage_handler.save_stage3_answer(question_id, matched_answer)
-    print(f"[Stage 3] {question_id} 답변 저장: {matched_answer}")
-    
-    # 다음 질문으로 이동
-    has_next = stage_handler.move_to_next_stage3_question()
-    
-    if has_next:
-        # 다음 질문이 있으면 표시
-        next_question = stage_handler.get_stage3_current_question()
-        total_questions = len(st.session_state.stage3_questions)
-        current_index = st.session_state.stage3_current_question_index
-        
-        question_text = f"**질문 {next_question['id'].replace('Q', '')} / {total_questions}**\n\n{next_question['text']}\n\n응답 옵션: 매우 그렇다 / 그렇다 / 보통이다 / 약간 그렇지 않다 / 매우 그렇지 않다"
-        add_assistant_message(question_text)
-        print(f"[Stage 3] 다음 질문 ({current_index + 1}/{total_questions}) 표시")
-        return question_text
-    else:
-        # 모든 질문 완료
-        print(f"[Stage 3] 모든 질문 완료 - 최종 분석 시작")
-        return _finalize_stage3_validation()
-
-
-def execute_stage3_initial_question():
-    """
-    Stage 3: 감별 질문 자동 생성 및 첫 번째 질문 제시
-    Hypothesis String -> 감별 질문 리스트 생성 -> 첫 번째 질문만 표시
-    """
-    print(f"[Stage 3] 감별 질문 생성 시작")
-    
-    stage_handler = st.session_state.stage_handler
-    
-    # Stage 2의 Hypothesis String 가져오기
-    stage2_output = stage_handler.get_stage_output(2)
-    if not stage2_output:
-        print(f"[Stage 3 오류] Stage 2 데이터 없음")
-        add_assistant_message("오류: 가설 데이터를 찾을 수 없습니다.")
-        return
-    
-    # Stage 3로 전달되는 데이터셋 확인
-    print(f"[Stage 3] 전달되는 데이터셋:")
-    print(f"  - stage2_output keys: {list(stage2_output.keys())}")
-    if "hypothesis_report" in stage2_output:
-        hypothesis_preview = stage2_output["hypothesis_report"][:200] if isinstance(stage2_output["hypothesis_report"], str) else str(stage2_output["hypothesis_report"])[:200]
-        print(f"  - hypothesis_report (preview): {hypothesis_preview}...")
-    if "by_diagnosis" in stage2_output:
-        by_diagnosis = stage2_output["by_diagnosis"]
-        if isinstance(by_diagnosis, dict):
-            print(f"  - by_diagnosis keys: {list(by_diagnosis.keys())}")
-            for diag, criteria_list in by_diagnosis.items():
-                if criteria_list and len(criteria_list) > 0 and isinstance(criteria_list[0], dict):
-                    text_preview = criteria_list[0].get("text", "")[:100]
-                    print(f"    - {diag}: {len(criteria_list)} criteria, text preview: {text_preview}...")
-    
-    # Stage 3 프롬프트와 컨텍스트 로드
-    prompt_template, context_data = stage_handler.get_stage_materials(3)
-    
-    # 감별 질문 생성 (첫 번째 호출)
-    response = ask_gemini_with_stage(
-        user_input="감별 질문 리스트를 생성해주세요. 질문 리스트만 생성하고, 사용자 응답은 기다리지 마세요.",
-        prompt_template=prompt_template,
-        context_data=context_data,
-        conversation_history=get_conversation_history(),
-        previous_stage_data=stage2_output
-    )
-    
-    # 응답 검증
-    if not response or response.strip() == "":
-        print(f"[Stage 3 오류] 빈 응답이 반환되었습니다!")
-        add_assistant_message("감별 질문 생성 중 오류가 발생했습니다.")
-        return
-    
-    # 응답에서 질문 리스트 파싱
-    user_message, internal_data = parse_ai_response(response)
-    questions = _parse_stage3_questions(user_message)
-    
-    if not questions or len(questions) == 0:
-        print(f"[Stage 3 오류] 질문 파싱 실패")
-        add_assistant_message("감별 질문 생성 중 오류가 발생했습니다.")
-        return
-    
-    # 질문 리스트 저장
-    stage_handler.init_stage3_questions(questions)
-    print(f"[Stage 3] 총 {len(questions)}개의 질문 생성 완료")
-    
-    # 첫 번째 질문만 사용자에게 표시
-    first_question = stage_handler.get_stage3_current_question()
-    if first_question:
-        question_text = f"**질문 {first_question['id'].replace('Q', '')} / {len(questions)}**\n\n{first_question['text']}\n\n응답 옵션: 매우 그렇다 / 그렇다 / 보통이다 / 약간 그렇지 않다 / 매우 그렇지 않다"
-        add_assistant_message(question_text)
-        print(f"[Stage 3] 첫 번째 질문 표시 완료 - 사용자 응답 대기")
-    else:
-        print(f"[Stage 3 오류] 첫 번째 질문 가져오기 실패")
-
-
-def execute_stage4_final_summary():
-    """
-    Stage 4: 최종 요약 및 솔루션 자동 생성
-    Validated String + Stage 1 Summary -> RAG 솔루션 검색 -> Final Response
-    """
-    print(f"[Stage 4] 최종 요약 생성 시작")
-    
-    stage_handler = st.session_state.stage_handler
-    
-    # Stage 1과 Stage 3 데이터 가져오기
-    stage1_output = stage_handler.get_stage_output(1)
-    stage3_output = stage_handler.get_stage_output(3)
-    
-    if not stage1_output or not stage3_output:
-        print(f"[Stage 4 오류] 이전 단계 데이터 없음")
-        add_assistant_message("오류: 이전 단계의 데이터를 찾을 수 없습니다.")
-        return
-    
-    # Validated String에서 확정 질환명 추출
-    validation_result = stage3_output.get("validation_result", "")
-    diagnosis = ""
-    if "Validated String:" in validation_result:
-        # "Validated String:" 이후의 내용 추출
-        parts = validation_result.split("Validated String:", 1)
-        if len(parts) > 1:
-            diagnosis = parts[1].strip()
-    else:
-        # Validated String:이 없으면 전체를 질환명으로 간주
-        diagnosis = validation_result.strip()
-    
-    if not diagnosis:
-        print(f"[Stage 4 오류] 확정 질환명을 찾을 수 없습니다.")
-        add_assistant_message("오류: 확정 질환명을 찾을 수 없습니다.")
-        return
-    
-    print(f"[Stage 4] 확정 질환명: {diagnosis}")
-    
-    # 사용자에게 처리 중임을 알림
-    processing_message = "최종 분석 결과와 맞춤형 솔루션을 준비하고 있습니다..."
-    add_assistant_message(processing_message)
-    
-    # RAG 솔루션 API 호출
-    from .rag_handler import process_stage4_rag_solution
-    
-    rag_solution_result = process_stage4_rag_solution(diagnosis)
-    
-    if not rag_solution_result:
-        print(f"[Stage 4 경고] RAG 솔루션 검색 실패 - 솔루션 없이 진행")
-        # 솔루션이 없어도 진행 (Gemini가 기본 응답 생성)
-        rag_solution_result = None
-    
-    # Stage 4 프롬프트와 컨텍스트 로드
-    prompt_template, context_data = stage_handler.get_stage_materials(4)
-    
-    # 통합 데이터 준비 (RAG 솔루션 결과 포함)
-    previous_stage_data = {
-        "stage1_summary": stage1_output.get("summary_report", ""),
-        "stage3_validation": stage3_output.get("validation_result", ""),
-        "rag_solution": rag_solution_result  # RAG 솔루션 결과 추가
-    }
-    
-    # 최종 요약 생성
-    response = ask_gemini_with_stage(
-        user_input="",  # Stage 4는 사용자 입력 불필요
-        prompt_template=prompt_template,
-        context_data=context_data,
-        conversation_history=get_conversation_history(),
-        previous_stage_data=previous_stage_data
-    )
-    
-    # 응답 검증
-    if not response or response.strip() == "":
-        print(f"[Stage 4 오류] 빈 응답이 반환되었습니다!")
-        add_assistant_message("최종 요약 생성 중 오류가 발생했습니다.")
-        return
-    
-    # 최종 응답 파싱 및 표시
-    user_message, internal_data = parse_ai_response(response)
-    
-    # 시스템 태그 제거 (Final Response String: 등)
-    if user_message:
-        user_message = remove_system_tags(user_message)
-    
-    if user_message:
-        add_assistant_message(user_message)
-        print(f"[Stage 4] 최종 요약 생성 완료")
-        
-        # 추가 질문 안내
-        add_assistant_message("추가로 궁금하신 점이 있으시면 언제든 말씀해주세요.")
-    else:
-        print(f"[Stage 4 오류] 최종 요약 생성 실패")
-
-
-# 사용자 입력을 처리하고 AI 응답 생성
-# 현재 단계에 맞는 프롬프트와 컨텍스트를 사용
-def process_user_input(user_input):
-
-    add_user_message(user_input)
-    
-    # StageHandler 가져오기
-    stage_handler = st.session_state.stage_handler
-    current_stage = stage_handler.get_current_stage()
-    print(f"--------------------------------")
-    print(f"사용자 입력: {user_input}")
-    print(f"현재 단계: {current_stage} ({stage_handler.get_stage_name()})")
-    print(f"--------------------------------")
-    
-    # Stage 3 특별 처리: 질문에 대한 답변 수집
-    if current_stage == 3:
-        return _handle_stage3_answer(user_input)
-    
-    # 현재 단계의 프롬프트와 컨텍스트 로드
-    prompt_template, context_data = stage_handler.get_stage_materials()
-    
-    # 대화 히스토리 가져오기 (현재 메시지 제외)
-    history = get_conversation_history(exclude_last=True)
-    
-    # 이전 단계 데이터 가져오기
-    previous_stage_data = None
-    if current_stage > 1:
-        # Stage 4는 Stage 1과 Stage 3의 데이터가 모두 필요
-        if current_stage == 4:
-            stage1_data = stage_handler.get_stage_output(1)
-            stage3_data = stage_handler.get_stage_output(3)
-            # 두 단계의 데이터를 통합
-            previous_stage_data = {
-                "stage1_summary": stage1_data.get("summary_report", "") if stage1_data else "",
-                "stage3_validation": stage3_data.get("validation_result", "") if stage3_data else ""
-            }
-        else:
-            # 다른 단계는 바로 이전 단계의 데이터만 필요
-            previous_stage_data = stage_handler.get_stage_output(current_stage - 1)
-            if previous_stage_data:
-                print(f"[Stage {current_stage}] 이전 단계 (Stage {current_stage - 1}) 데이터:")
-                for key, value in previous_stage_data.items():
-                    if isinstance(value, str):
-                        print(f"  - {key}: {len(value)}자")
-                    else:
-                        print(f"  - {key}: {type(value)}")
-            else:
-                print(f"[Stage {current_stage}] 이전 단계 데이터 없음")
-    else:
-        print(f"[Stage {current_stage}] 이전 단계 데이터 없음 (첫 번째 단계)")
-    
-    print(f"{'*'*80}\n")
-    
-    # Stage 1인 경우 턴 수 증가 (사용자 응답이 들어왔으므로)
-    if current_stage == 1:
-        stage_handler.increment_stage1_turn()
-        print(f"[Stage 1] 현재 대화 턴 수: {stage_handler.get_stage1_turn_count()}")
-    
-    # 단계별 Gemini API 호출
-    response = ask_gemini_with_stage(
-        user_input=user_input,
-        prompt_template=prompt_template,
-        context_data=context_data,
-        conversation_history=history,
-        previous_stage_data=previous_stage_data
-    )
-    
-    # 응답 검증
-    if not response or response.strip() == "":
-        print(f"[오류] 빈 응답이 반환되었습니다!")
-        response = "죄송합니다. 응답 생성에 문제가 발생했습니다. 다시 시도해주세요."
-    
-    
-    # 응답을 사용자 메시지와 내부 데이터로 분리
-    user_message, internal_data = parse_ai_response(response)
-    
-    # 사용자에게 표시할 메시지가 있으면 추가
-    if user_message:
-        add_assistant_message(user_message)
-    else:
-        print(f"[Chat Handler] 사용자에게 표시할 메시지 없음 (내부 처리 단계)")
-    
-    # 단계 전환 체크는 내부 데이터 또는 전체 응답 사용
-    transition_data = internal_data if internal_data else response
-    
-    # 자동 단계 전환 체크
-    current_history = get_conversation_history(exclude_last=False)
-    if stage_handler.should_transition(transition_data, conversation_history=current_history):
-        
-        # 내부 데이터를 stage_output에 저장 (다음 단계 입력으로 사용)
-        if "Summary String:" in transition_data:
-            stage_handler.save_stage_output(current_stage, {
-                "summary_report": transition_data,
-                "user_visible_message": user_message
-            })
-        elif "Hypothesis String:" in transition_data:
-            stage_handler.save_stage_output(current_stage, {
-                "hypothesis_report": transition_data
-            })
-        elif "Validated String:" in transition_data:
-            # Stage 2 후보 중 정확히 동일한 문자열로 정규화하여 저장
-            try:
-                stage2_output = stage_handler.get_stage_output(2)
-                hypothesis_report = stage2_output.get("hypothesis_report", "") if stage2_output else ""
-                candidates = _extract_top_diagnosis_candidates(hypothesis_report)
-                normalized_choice = _normalize_validated_to_candidates(transition_data, candidates)
-                transition_data = f"Validated String:\n{normalized_choice}"
-            except Exception as e:
-                print(f"[Stage 3] Validated String 정규화 실패: {e}")
-            
-            stage_handler.save_stage_output(current_stage, {
-                "validation_result": transition_data,
-                "user_visible_message": user_message
-            })
-        
-        # 다음 단계로 이동
-        stage_handler.move_to_next_stage()
-        next_stage = stage_handler.get_current_stage()
-        
-        # 다음 단계의 가이드라인은 별도의 UI 컴포넌트로 렌더링됨 (채팅 메시지로 추가하지 않음)
-        
-        # ★★★ 핵심: 다음 단계의 초기 행동 자동 실행 ★★★
-        execute_stage_initial_action(next_stage)
-    
-    return user_message if user_message else "분석 중입니다..."
-
-# 현재 단계 정보 반환
 def get_current_stage_info():
-    if "stage_handler" not in st.session_state:
+    """
+    현재 진행 중인 상담 단계 정보를 반환
+    (Graph의 현재 노드 정보를 기반으로 추론)
+    """
+    if "graph_client" not in st.session_state or "thread_id" not in st.session_state:
         return None
+        
+    client = st.session_state.graph_client
+    snapshot = client.get_state_snapshot(st.session_state.thread_id)
     
-    stage_handler = st.session_state.stage_handler
-    current_stage = stage_handler.get_current_stage()
-    stage_name = stage_handler.get_stage_name()
+    # 현재 대기 중인 다음 노드 확인 (next는 튜플)
+    next_nodes = snapshot.get("next", [])
+    current_node = next_nodes[0] if next_nodes else "unknown"
+    
+    # 노드 이름 매핑
+    stage_map = {
+        "intake": 1,
+        "hypothesis": 2,
+        "validation": 3,
+        "severity": 4,
+        "solution": 5,
+        "__end__": 6
+    }
+    
+    stage_num = stage_map.get(current_node, 0)
     
     return {
-        "stage": current_stage,
-        "name": stage_name,
-        "total_stages": 4
+        "stage": stage_num,
+        "name": current_node,
+        "total_stages": 5
     }
-

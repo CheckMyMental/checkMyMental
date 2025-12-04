@@ -105,6 +105,31 @@ class GraphClient:
         # 그래프 스트리밍 실행 (모든 업데이트 수신)
         return self.graph.stream(initial_state, config=config, stream_mode="updates")
 
+    def get_state_snapshot(self, thread_id: str) -> Dict[str, Any]:
+        """
+        현재 그래프의 상태 스냅샷(StateSnapshot) 조회
+        
+        Args:
+            thread_id: 세션 ID
+            
+        Returns:
+            Dict: {
+                "values": CounselingState 값,
+                "next": 다음 실행될 노드 목록,
+                "config": 현재 설정
+            }
+        """
+        config = self.get_config(thread_id)
+        snapshot = self.graph.get_state(config)
+        
+        return {
+            "values": snapshot.values,
+            "next": snapshot.next,
+            "config": snapshot.config,
+            "metadata": snapshot.metadata,
+            "created_at": snapshot.created_at
+        }
+
 # 전역 인스턴스 접근용 헬퍼 함수
 def get_graph_client() -> GraphClient:
     return GraphClient()

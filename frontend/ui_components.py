@@ -3,7 +3,8 @@ import streamlit as st
 import time
 import json
 
-from .chat_handler import get_current_stage_info, get_graph_client
+from .chat_handler import get_current_stage_info
+from .graph_client import get_graph_client
 
 def setup_page_config():
     # 페이지 설정

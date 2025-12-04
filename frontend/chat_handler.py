@@ -2,7 +2,6 @@ import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 
 from .graph_client import get_graph_client
-from .ui_components import render_chat_messages
 
 def init_chat_history():
     """

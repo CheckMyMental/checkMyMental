@@ -1,10 +1,12 @@
 import uuid
-from typing import Optional, Any
+from typing import Optional, Any, Dict, Generator
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import HumanMessage
 
 from graph.graph_builder import build_graph
+from graph.state import CounselingState
 
 class GraphClient:
     """
@@ -60,7 +62,49 @@ class GraphClient:
         """새로운 thread_id(UUID) 생성"""
         return str(uuid.uuid4())
 
+    def invoke_graph(self, user_input: str, thread_id: str) -> CounselingState:
+        """
+        사용자 입력을 그래프에 전달하고 실행 (Blocking)
+        
+        Args:
+            user_input: 사용자 입력 메시지
+            thread_id: 세션 ID
+            
+        Returns:
+            CounselingState: 실행 완료 후의 최종 상태
+        """
+        config = self.get_config(thread_id)
+        
+        # 입력 상태 생성 (HumanMessage 추가)
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)]
+        }
+        
+        # 그래프 실행
+        result = self.graph.invoke(initial_state, config=config)
+        return result
+
+    def stream_graph(self, user_input: str, thread_id: str) -> Generator[Dict[str, Any], None, None]:
+        """
+        사용자 입력을 그래프에 전달하고 스트리밍 실행
+        
+        Args:
+            user_input: 사용자 입력 메시지
+            thread_id: 세션 ID
+            
+        Yields:
+            Dict: 그래프 실행 중 발생하는 이벤트/청크 (노드 업데이트 등)
+        """
+        config = self.get_config(thread_id)
+        
+        # 입력 상태 생성
+        initial_state = {
+            "messages": [HumanMessage(content=user_input)]
+        }
+        
+        # 그래프 스트리밍 실행 (모든 업데이트 수신)
+        return self.graph.stream(initial_state, config=config, stream_mode="updates")
+
 # 전역 인스턴스 접근용 헬퍼 함수
 def get_graph_client() -> GraphClient:
     return GraphClient()
-

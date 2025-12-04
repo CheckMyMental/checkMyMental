@@ -1,7 +1,9 @@
 # UI 컴포넌트 모듈
 import streamlit as st
 import time
+import json
 
+from .chat_handler import get_current_stage_info, get_graph_client
 
 def setup_page_config():
     # 페이지 설정
@@ -18,8 +20,6 @@ def render_sidebar():
     st.sidebar.title("📋 상담 단계")
 
     # 현재 단계 정보 가져오기
-    from .chat_handler import get_current_stage_info
-
     stage_info = get_current_stage_info()
 
     stages = [
@@ -27,7 +27,12 @@ def render_sidebar():
         ("2.가설 생성 (Hypothesis Generation)", "관련 질환을 검색 중입니다", "#2D8659"),
         ("3.진단 검증 (Validation)", "질환을 감별하고 확정합니다", "#CC6F35"),
         (
-            "4.솔루션 및 요약 (Solution & Summary)",
+            "4.심각도 평가 (Severity)", 
+            "증상의 심각도를 평가합니다", 
+            "#D35400"
+        ),
+        (
+            "5.솔루션 및 요약 (Solution & Summary)",
             "최종 요약과 행동 계획을 제시합니다",
             "#7D3C98",
         ),
@@ -61,19 +66,53 @@ def render_sidebar():
             )
 
     st.sidebar.markdown("---")
+    
+    # --- 디버그/상태 패널 (개발자용) ---
+    with st.sidebar.expander("🛠️ 디버그 패널 (상태 정보)", expanded=False):
+        if "thread_id" in st.session_state:
+            st.markdown(f"**Session ID:** `{st.session_state.thread_id}`")
+            
+            client = get_graph_client()
+            try:
+                snapshot = client.get_state_snapshot(st.session_state.thread_id)
+                state_values = snapshot.get("values", {})
+                
+                st.markdown("### Current State Data")
+                
+                # 1단계: 요약 리포트
+                if state_values.get("intake_summary_report"):
+                    st.info("✅ Intake Summary Available")
+                    with st.popover("Show Summary"):
+                        st.code(state_values["intake_summary_report"])
+                
+                # 2단계: 가설
+                if state_values.get("hypothesis_criteria"):
+                    st.success("✅ Hypothesis Criteria")
+                    with st.popover("Show Criteria"):
+                        st.json(state_values["hypothesis_criteria"])
+                
+                # 3단계: 검증 결과
+                if state_values.get("validation_probabilities"):
+                     st.warning("✅ Validation Probs")
+                     st.write(state_values["validation_probabilities"])
+                
+                # 전체 State Raw View
+                if st.checkbox("Show Raw State"):
+                    st.json({k: v for k, v in state_values.items() if k != "messages"})
+                    
+            except Exception as e:
+                st.error(f"Error fetching state: {e}")
+        else:
+            st.text("Session not initialized")
 
-    # 초기화(개발,테스트용) 버튼 (개발/테스트용)
-    if st.sidebar.button("초기화(개발,테스트용)"):
-        if "stage_handler" in st.session_state:
-            st.session_state.stage_handler.reset_stage()
-            st.session_state.messages = []
-            # 가이드라인 메시지도 다시 추가되도록 플래그 초기화
-            if "guideline_added" in st.session_state:
-                del st.session_state.guideline_added
-            # 렌더링 카운트도 초기화
-            if "rendered_message_count" in st.session_state:
-                del st.session_state.rendered_message_count
-            st.rerun()
+    st.sidebar.markdown("---")
+
+    # 초기화 버튼
+    if st.sidebar.button("새 상담 시작"):
+        # 세션 상태 초기화
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 
 def render_main_header():
@@ -89,36 +128,39 @@ def render_chat_messages(messages):
     
     # 채팅 메시지들을 화면에 표시
     for idx, message in enumerate(messages):
-        # 가이드라인 메시지인지 확인
-        is_guideline = message.get("is_guideline", False)
+        # 가이드라인 메시지 (HTML 포함) 등 특수 메시지 처리
+        is_html = message.get("is_html", False) # TODO: Graph 전환 시 필드 확인 필요
 
-        if is_guideline:
-            # 가이드라인 메시지는 이미 HTML로 스타일링되어 있으므로 그대로 표시
-            # content가 이미 완전한 HTML이므로 unsafe_allow_html=True 필요
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"], unsafe_allow_html=True)
-        else:
-            # 일반 메시지 표시
-            with st.chat_message(message["role"]):
-                # 사용자 메시지는 바로 표시
-                if message["role"] == "user":
-                    st.markdown(message["content"])
+        with st.chat_message(message["role"]):
+             # 새로 추가된 Assistant 메시지만 타이핑 효과 적용
+             # 이미 표시된 메시지는 바로 표시
+            if message["role"] == "assistant" and idx >= st.session_state.rendered_message_count:
+                _render_typing_effect(message["content"])
+            else:
+                if is_html:
+                    st.markdown(message["content"], unsafe_allow_html=True)
                 else:
-                    # 새로 추가된 Assistant 메시지만 타이핑 효과 적용
-                    # 이미 표시된 메시지는 바로 표시
-                    if idx < st.session_state.rendered_message_count:
-                        st.markdown(message["content"])
-                    else:
-                        # 새 메시지는 타이핑 효과 적용
-                        _render_typing_effect(message["content"])
+                    st.markdown(message["content"])
     
     # 렌더링된 메시지 수 업데이트
     st.session_state.rendered_message_count = len(messages)
 
 
 def render_user_input():
-    # 사용자 입력창 표시
-    return st.chat_input("지금 어떤 기분이신가요?")
+    # 사용자 입력 제어
+    # Graph가 실행 중이거나 특정 종료 상태인 경우 입력 비활성화 가능
+    # 현재는 단순 구현
+    
+    # 단계 정보 확인 (종료 단계 등)
+    stage_info = get_current_stage_info()
+    disabled = False
+    placeholder = "지금 어떤 기분이신가요?"
+    
+    if stage_info and stage_info.get("stage") == 6: # End
+        disabled = True
+        placeholder = "상담이 종료되었습니다. '새 상담 시작'을 눌러주세요."
+        
+    return st.chat_input(placeholder, disabled=disabled)
 
 
 def _render_typing_effect(text, speed=0.02):
@@ -142,11 +184,3 @@ def _render_typing_effect(text, speed=0.02):
     except AttributeError:
         # write_stream이 없는 경우 일반 표시
         st.markdown(text)
-
-
-def render_assistant_response(response):
-    # AI 응답을 화면에 표시 (타이핑 효과 포함)
-    with st.chat_message("assistant"):
-        _render_typing_effect(response)
-
-

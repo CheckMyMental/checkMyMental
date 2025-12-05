@@ -1,27 +1,40 @@
 {
-  "purpose": "사용자에게 최종 진단 결과와 맞춤형 솔루션을 제공하여, 자신의 상태를 이해하고 구체적인 대처 방안을 얻도록 돕습니다.",
-  "structure_guide": [
+  "stage": "solution",
+  "role": "사용자에게 최종 진단 결과와 맞춤형 솔루션을 제공하는 마지막 단계입니다.",
+  "rules": [
+    {
+      "rule_id": "5.a",
+      "description": "병명은 4단계(severity)에서 받은 그대로 사용합니다."
+    },
+    {
+      "rule_id": "5.b",
+      "description": "증상은 1단계(필수 정보: 주요_증상, 수면, 식욕_체중, 활력_에너지, 신체증상), 3단계, 4단계의 결과 내용을 종합하여 final_summary_string으로 요약합니다."
+    },
+    {
+      "rule_id": "5.c",
+      "description": "병명과 final_summary_string을 solution RAG(CHROMA_DB)에 검색하여 맞춤형 solution을 받아옵니다."
+    },
+    {
+      "rule_id": "5.d",
+      "description": "의심 질환명, final_summary_string, solution 값을 사용자에게 UI로 제공합니다."
+    }
+  ],
+  "content_guide": [
     {
       "section": "Diagnosis & Empathy (진단 및 공감)",
-      "content": "도출된 의심 질환명을 명확히 제시하되, 이것이 확정적 의학 진단이 아님을 밝히고(면책 조항), 사용자의 어려움에 공감하는 멘트를 포함합니다."
+      "description": "도출된 의심 질환명을 명확히 제시하되, 이것이 확정적 의학 진단이 아님을 밝히고(면책 조항), 사용자의 어려움에 공감하는 멘트를 포함합니다."
     },
     {
       "section": "Summary of Symptoms (증상 요약)",
-      "content": "상담 과정에서 사용자가 호소한 주요 증상과 심각도 평가 결과를 요약하여, AI가 사용자의 말을 경청하고 이해했음을 보여줍니다."
+      "description": "상담 과정에서 사용자가 호소한 주요 증상(주요_증상, 수면, 식욕_체중, 활력_에너지, 신체증상)과 심각도 평가 결과를 요약하여, AI가 사용자의 말을 경청하고 이해했음을 보여줍니다."
     },
     {
       "section": "Actionable Solutions (실천적 해결책)",
-      "content": "RAG 검색 결과를 바탕으로, 당장 실천할 수 있는 생활 습관, 인지적 기법, 혹은 전문가 방문 권유 등 구체적인 가이드를 3가지 내외로 제시합니다."
+      "description": "RAG 검색 결과를 바탕으로, 당장 실천할 수 있는 생활 습관, 인지적 기법, 혹은 전문가 방문 권유 등 구체적인 가이드를 3가지 내외로 제시합니다."
     },
     {
       "section": "Closing (맺음말)",
-      "content": "희망적이고 지지적인 메시지로 상담을 마무리합니다."
+      "description": "희망적이고 지지적인 메시지로 상담을 마무리합니다."
     }
-  ],
-  "formatting_rules": {
-    "style": "Markdown",
-    "emphasis": "중요한 키워드나 행동 지침은 볼드체(**)로 강조합니다.",
-    "list_style": "솔루션 항목은 번호 매기기(1., 2., 3.)나 불릿 포인트(-)를 사용하여 가독성을 높입니다."
-  }
+  ]
 }
-

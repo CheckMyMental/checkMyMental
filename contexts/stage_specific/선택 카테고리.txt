@@ -1,0 +1,181 @@
+[
+  {
+    "domain_id": "I",
+    "domain_name_kr": "우울",
+    "domain_name_en": "Depression",
+    "questions": [
+      "Little interest or pleasure in doing things?",
+      "Feeling down, depressed, or hopeless?"
+    ],
+    "dsm5_symptom_terms": [
+      "Anhedonia",
+      "Depressed Mood",
+      "Dysphoria",
+      "Hopelessness"
+    ]
+  },
+  {
+    "domain_id": "II",
+    "domain_name_kr": "분노",
+    "domain_name_en": "Anger",
+    "questions": [
+      "Feeling more irritated, grouchy, angry than usual?"
+    ],
+    "dsm5_symptom_terms": [
+      "Irritability",
+      "Hostility",
+      "Anger Outbursts"
+    ]
+  },
+  {
+    "domain_id": "III",
+    "domain_name_kr": "조증",
+    "domain_name_en": "Mania",
+    "questions": [
+      "Sleeping less than usual, but still have a lot of energy?",
+      "Starting lots more projects than usual or doing more risky things than usual?"
+    ],
+    "dsm5_symptom_terms": [
+      "Decreased Need for Sleep",
+      "Grandiosity",
+      "Psychomotor Agitation",
+      "Risk-Taking Behavior"
+    ]
+  },
+  {
+    "domain_id": "IV",
+    "domain_name_kr": "불안",
+    "domain_name_en": "Anxiety",
+    "questions": [
+      "Feeling nervous, anxious, frightened, worried, or on edge?",
+      "Feeling panic or being frightened?",
+      "Avoiding situations that make you anxious?"
+    ],
+    "dsm5_symptom_terms": [
+      "Anticipatory Anxiety",
+      "Panic Attacks",
+      "Avoidance Behavior",
+      "Hyperarousal"
+    ]
+  },
+  {
+    "domain_id": "V",
+    "domain_name_kr": "신체 증상",
+    "domain_name_en": "Somatic Symptoms",
+    "questions": [
+      "Unexplained aches and pains (e.g., head, back, joints, abdomen, legs)?",
+      "Feeling that your illnesses are not being taken seriously enough?"
+    ],
+    "dsm5_symptom_terms": [
+      "Somatic Complaints",
+      "Health Anxiety",
+      "Hypochondriasis"
+    ]
+  },
+  {
+    "domain_id": "VI",
+    "domain_name_kr": "자살 사고",
+    "domain_name_en": "Suicidal Ideation",
+    "questions": [
+      "Thoughts of actually hurting yourself?"
+    ],
+    "dsm5_symptom_terms": [
+      "Suicidal Ideation",
+      "Self-Harm Intent"
+    ]
+  },
+  {
+    "domain_id": "VII",
+    "domain_name_kr": "정신증",
+    "domain_name_en": "Psychosis",
+    "questions": [
+      "Hearing things other people couldn’t hear, such as voices even when no one was around?",
+      "Feeling that someone could hear your thoughts, or that you could hear what another person was thinking?"
+    ],
+    "dsm5_symptom_terms": [
+      "Hallucinations",
+      "Delusions",
+      "Persecutory Delusions",
+      "Referential Delusions"
+    ]
+  },
+  {
+    "domain_id": "VIII",
+    "domain_name_kr": "수면 문제",
+    "domain_name_en": "Sleep Problems",
+    "questions": [
+      "Problems with sleep that affected your sleep quality overall?"
+    ],
+    "dsm5_symptom_terms": [
+      "Insomnia",
+      "Sleep Disturbance"
+    ]
+  },
+  {
+    "domain_id": "IX",
+    "domain_name_kr": "기억",
+    "domain_name_en": "Memory",
+    "questions": [
+      "Problems with memory (e.g., learning new information) or with location (e.g., finding your way home)?"
+    ],
+    "dsm5_symptom_terms": [
+      "Memory Impairment",
+      "Disorientation",
+      "Cognitive Decline"
+    ]
+  },
+  {
+    "domain_id": "X",
+    "domain_name_kr": "강박 사고 및 행동",
+    "domain_name_en": "Repetitive Thoughts and Behaviors",
+    "questions": [
+      "Unpleasant thoughts, urges, or images that repeatedly enter your mind?",
+      "Feeling driven to perform certain behaviors or mental acts over and over again?"
+    ],
+    "dsm5_symptom_terms": [
+      "Obsessions",
+      "Compulsions"
+    ]
+  },
+  {
+    "domain_id": "XI",
+    "domain_name_kr": "해리",
+    "domain_name_en": "Dissociation",
+    "questions": [
+      "Feeling detached or distant from yourself, your body, your physical surroundings, or your memories?"
+    ],
+    "dsm5_symptom_terms": [
+      "Depersonalization",
+      "Derealization",
+      "Dissociation"
+    ]
+  },
+  {
+    "domain_id": "XII",
+    "domain_name_kr": "성격 기능",
+    "domain_name_en": "Personality Functioning",
+    "questions": [
+      "Not knowing who you really are or what you want out of life?",
+      "Not feeling close to other people or enjoying your relationships with them?"
+    ],
+    "dsm5_symptom_terms": [
+      "Identity Disturbance",
+      "Interpersonal Dysfunction"
+    ]
+  },
+  {
+    "domain_id": "XIII",
+    "domain_name_kr": "물질 사용",
+    "domain_name_en": "Substance Use",
+    "questions": [
+      "Drink at least 4 drinks of any kind of alcohol in a single day?",
+      "Smoke any cigarettes, a cigar, or pipe, or use snuff or chewing tobacco?",
+      "Use any of the following medicines ON YOUR OWN, that is, without a doctor’s prescription, in greater amounts or longer than prescribed?"
+    ],
+    "dsm5_symptom_terms": [
+      "Substance Misuse",
+      "Substance Dependence",
+      "Intoxication"
+    ]
+  }
+]

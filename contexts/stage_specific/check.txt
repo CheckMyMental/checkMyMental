@@ -1,0 +1,28 @@
+intake
+-(1.a) 기분이나, 어떤 주요증상때문에 왔는지 질문함
+-(1.b) <필수 수집 정보 context>를 참고하여 필수정보 5가지 주요증상에 대한 질문을 함, 정보가 충분히 채워지지 않는다면 2단계로 넘어가지 않음.
+-(1.c) 만약, 13개 도메인에 해당하는 정보가 나온다면, 해당 단계에서 <13개 도메인 context>를 참고하여 추가로 질문을 하여, 필수정보에 대한 내용을 구체화시킴. 질문에 대한 답이 끝나면 다시 (1,b)로 돌아감.
+-정보가 충분히 수집되었다면, intake_summary_report를 생성하고, 2단계(hypothesis)로 넘어감
+
+hypothesis
+-summary report를 input으로 하여 DB(chroma)에 검색을함
+-output으로는 의심 질환 3가지, 의심질환에 대한 판단기준 리스트가 제공됨.
+-해당 output을 validation으로 넘김.
+
+validation
+-해당 판단기준에 대한 내용이 포함되게끔 질문을 생성함.(어떤 방식으로 내용이 포함되게끔 질문을 생성하는지는 <question_generation_context>를 참고하여 생성함
+-질문은 의심질환 3가지에 대해 동등한 비율로 생성하게 됨. (한 질환에 대해, 최대 10개의 질문을 생성)
+-해당 질문에 대한 응답은 5지선다형으로 받으며, 후보질환에 대한 판단은 진단기준을 참고하여 확률 판단 기준을 세우고, 확률 계산을 하여 output으로 확률값을 출력한다.
+
+-(분기 1) 세 의심 질환에 대하여 모두 50% 이하의 확률을 갖는다면 1단계로 돌아가서 기존의 정보에 추가 질문을 하여 intake_summary_report를 보강하여 2단계로 진행한다. 분기1에 해당하여 1단계로 돌아갔을때에는 (re_stage1_intake.json)를 참고한다.
+-(분기 2) 확률값이 가장 높은 질환 하나만 심각도 검사를 진행한다.
+
+severity
+-3단계에서 받은 의심질환 1가지에 대해 해당하는 질환 컨텍스트(예: depressionseverity)  를 참고하여 질문을 생성하여 사용자에게 묻는다. 
+-질환에 대한 심각도 검사는 context 기준에 따르며, 해당 검사내용과 병명은 string형식으로 5단계로 넘긴다.
+
+solution
+-병명은 4단계에서 받은 그대로, 증상은 1단계,3단계,4단계의 결과 내용을 요약한다.(final summary_string)
+-summary _severity_string을 solution RAG(CHROMA_DB)에 검색해서 solution을 받아온다.
+input으로는 병명과 final_summary_string 두 값을 넣는다.
+-RAG에서 solution을 받고, 사용자에게 의심질환,final_summary_string,solution 값을 ui로 제공한다.

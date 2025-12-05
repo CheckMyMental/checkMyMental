@@ -1,31 +1,86 @@
 {
+  "stage": "intake",
+  "role": "사용자의 주요 호소 증상과 필수 정보를 수집하는 초기 상담 단계입니다.",
+  "rules": [
+    {
+      "rule_id": "1.a",
+      "description": "사용자에게 기분이나 어떤 주요 증상 때문에 상담을 원하는지 먼저 질문합니다."
+    },
+    {
+      "rule_id": "1.b",
+      "description": "아래 5가지 필수 수집 정보에 대해 질문하며, 모든 정보가 충분히 수집되지 않으면 1.d단계(hypothesis)로 넘어가지 않습니다. "
+    },
+    {
+      "rule_id": "1.c",
+      "description": "대화 중 11개 도메인(우울, 분노, 조증, 불안, 자살 사고, 정신증, 기억, 강박사고 및 행동, 해리, 물질사용)에 해당하는 정보가 나오면, context_stage1_domains.json을 참고하여 추가 질문을 통해 필수 정보를 구체화합니다. 추가 질문이 끝나면 다시 (1.b)로 돌아갑니다."
+    },
+    {
+      "rule_id": "1.d",
+      "description": "필수 정보와 감지된 도메인에 대핝 정보가 충분히 수집되면 intake_summary_report를 생성하고, 2단계(hypothesis)로 넘어갑니다."
+    }
+  ],
   "mandatory_fields": [
     {
-      "field_name": "Chief Complaint (주 호소 증상)",
-      "description": "사용자가 상담을 요청하게 된 가장 주된 문제나 증상. '기분'이나 '방문 이유'를 포함.",
+      "field_name": "주요_증상 (Chief Complaint)",
+      "description": "사용자가 상담을 요청하게 된 가장 주된 문제나 증상. 기분이나 방문 이유를 포함.",
       "question_guide": "무엇 때문에 상담을 받고 싶으신가요? 현재 기분은 어떠신가요?"
     },
     {
-      "field_name": "Onset (증상 시작 시기)",
-      "description": "증상이 언제부터 시작되었는지에 대한 정보.",
-      "question_guide": "이런 증상이 언제부터 시작되었나요?"
+      "field_name": "수면 (Sleep)",
+      "description": "수면과 관련된 문제 유형을 파악합니다.",
+      "problem_types": [
+        "불면증(insomnia)",
+        "과다수면(hypersomnia)",
+        "입면 곤란(difficulty falling asleep)",
+        "수면 유지 곤란(difficulty staying asleep)",
+        "이른 아침 각성(early morning awakening)",
+        "문제 없음"
+      ],
+      "question_guide": "요즘 수면은 어떠신가요? 잠들기 어렵거나, 자주 깨거나, 너무 많이 주무시나요?"
     },
     {
-      "field_name": "Frequency & Duration (빈도 및 지속 시간)",
-      "description": "증상이 얼마나 자주 발생하며, 한 번 발생 시 얼마나 지속되는지.",
-      "question_guide": "증상이 얼마나 자주 나타나나요? 하루 중 얼마나 지속되나요?"
+      "field_name": "식욕_체중 (Appetite & Weight)",
+      "description": "식욕 및 체중 변화와 관련된 문제 유형을 파악합니다.",
+      "problem_types": [
+        "식욕 감소(decreased appetite)",
+        "식욕 증가(increased appetite)",
+        "현저한 체중 감소(significant weight loss)",
+        "현저한 체중 증가(significant weight gain)",
+        "문제 없음"
+      ],
+      "question_guide": "최근 식욕이나 체중에 변화가 있으셨나요?"
     },
     {
-      "field_name": "Impairment (일상생활 지장 정도)",
-      "description": "증상이 직업, 학업, 사회적 관계 등 일상생활에 미치는 영향.",
-      "question_guide": "이 증상 때문에 일상생활이나 업무(학업)에 어려움이 있으신가요?"
+      "field_name": "활력_에너지 (Energy & Vitality)",
+      "description": "활력 및 에너지 수준과 관련된 문제 유형을 파악합니다.",
+      "problem_types": [
+        "피로(fatigue)",
+        "활력 상실(loss of energy)",
+        "정신운동 지연(psychomotor retardation)",
+        "정신운동 초조(psychomotor agitation)",
+        "집중력 감소(diminished ability to concentrate)",
+        "우유부단(indecisiveness)",
+        "문제 없음"
+      ],
+      "question_guide": "요즘 에너지 수준은 어떠신가요? 피로감을 느끼시거나 집중하기 어려우신가요?"
     },
     {
-      "field_name": "History (과거력 및 가족력)",
-      "description": "이전에도 비슷한 경험이 있었는지, 혹은 가족 중에 비슷한 증상을 겪은 사람이 있는지.",
-      "question_guide": "이전에도 이런 경험이 있으셨나요? 혹시 가족 분들 중에도 비슷한 어려움을 겪은 분이 계신가요?"
+      "field_name": "신체증상 (Somatic Symptoms)",
+      "description": "신체적 증상과 관련된 문제 유형을 파악합니다.",
+      "problem_types": [
+        "두통(headache)",
+        "위장 증상(gastrointestinal symptoms)",
+        "근육 긴장(muscle tension)",
+        "심계항진(palpitations)",
+        "호흡곤란(shortness of breath)",
+        "흉부 불편감(chest discomfort)",
+        "현기증(dizziness)",
+        "이인증(depersonalization)",
+        "비현실감(derealization)",
+        "문제 없음"
+      ],
+      "question_guide": "신체적으로 불편한 증상이 있으신가요? 두통, 가슴 두근거림, 소화 문제 등이 있으신가요?"
     }
   ],
-  "instructions": "위 5가지 필수 정보를 모두 수집해야 다음 단계로 넘어갈 수 있습니다. 자연스러운 대화 흐름을 유지하며 하나씩 질문하세요."
+  "conversation_guide": "자연스러운 대화 흐름을 유지하며 하나씩 질문하세요. 사용자의 답변에 공감하고, 필요한 경우 clarification 질문을 통해 정보를 구체화합니다."
 }
-

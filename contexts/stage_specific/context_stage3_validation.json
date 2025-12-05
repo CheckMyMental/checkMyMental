@@ -1,7 +1,48 @@
 {
-  "instruction": "의심 질환의 진단 기준(Criteria)을 바탕으로 사용자의 증상 부합 여부를 확인하기 위한 객관식 질문을 생성하세요.",
-  "question_format": {
-    "type": "Multiple Choice (5-point scale)",
+  "stage": "validation",
+  "role": "2단계(hypothesis)에서 도출된 의심 질환 3가지에 대해 진단 기준 부합 여부를 검증하는 단계입니다.",
+  "rules": [
+    {
+      "rule_id": "3.a",
+      "description": "의심 질환의 진단 기준(Criteria)을 바탕으로 사용자의 증상 부합 여부를 확인하기 위한 객관식 질문을 생성합니다."
+    },
+    {
+      "rule_id": "3.b",
+      "description": "질문은 의심 질환 3가지에 대해 동등한 비율로 생성합니다. 한 질환당 최대 10개의 질문을 생성합니다."
+    },
+    {
+      "rule_id": "3.c",
+      "description": "사용자 응답은 5지선다형으로 받으며, 진단 기준을 참고하여 확률 계산을 수행합니다."
+    },
+    {
+      "rule_id": "3.d_branch1",
+      "description": "세 의심 질환 모두 50% 이하의 확률을 가지면, 1단계로 돌아가 re_intake 컨텍스트를 참고하여 필수 정보(주요_증상, 수면, 식욕_체중, 활력_에너지, 신체증상)를 보강한 후 다시 2단계로 진행합니다."
+    },
+    {
+      "rule_id": "3.d_branch2",
+      "description": "확률값이 가장 높은 질환 하나만 선정하여 4단계(severity) 심각도 검사를 진행합니다."
+    }
+  ],
+  "question_generation_rules": [
+    {
+      "rule": "Coverage",
+      "detail": "제공된 진단 기준의 핵심 증상을 모두 커버할 수 있도록 질문을 구성합니다."
+    },
+    {
+      "rule": "Clarity",
+      "detail": "의학 용어 대신 사용자가 이해하기 쉬운 일상적인 언어를 사용합니다."
+    },
+    {
+      "rule": "Neutrality",
+      "detail": "유도 심문을 피하고 중립적인 어조를 유지합니다."
+    },
+    {
+      "rule": "Quantity",
+      "detail": "한 질환당 최대 10개의 질문을 생성하며, 3가지 질환에 대해 동등한 비율로 질문을 배분합니다."
+    }
+  ],
+  "response_scale": {
+    "type": "5-point Likert scale",
     "options": [
       "1. 전혀 그렇지 않다",
       "2. 거의 그렇지 않다",
@@ -9,24 +50,5 @@
       "4. 자주 그렇다",
       "5. 매우 자주/항상 그렇다"
     ]
-  },
-  "generation_rules": [
-    {
-      "rule": "Coverage",
-      "detail": "제공된 진단 기준의 핵심 증상을 모두 커버할 수 있도록 질문을 구성하세요."
-    },
-    {
-      "rule": "Clarity",
-      "detail": "의학 용어 대신 사용자가 이해하기 쉬운 일상적인 언어를 사용하세요."
-    },
-    {
-      "rule": "Neutrality",
-      "detail": "유도 심문을 피하고 중립적인 어조를 유지하세요."
-    },
-    {
-      "rule": "Quantity",
-      "detail": "한 질환당 최대 10개의 질문을 생성하며, 3가지 질환에 대해 동등한 비율로 질문을 배분하세요."
-    }
-  ]
+  }
 }
-

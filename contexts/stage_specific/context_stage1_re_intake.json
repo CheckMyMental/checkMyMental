@@ -1,5 +1,21 @@
 {
-  "purpose": "Validation 단계에서 모든 의심 질환의 확률이 50% 이하일 때, 진단 정확도를 높이기 위해 추가 정보를 수집합니다.",
+  "stage": "re_intake",
+  "role": "Validation 단계에서 모든 의심 질환의 확률이 50% 이하일 때 추가 정보를 수집하기 위해 1단계로 돌아온 상태입니다.",
+  "trigger_condition": "3단계(validation)에서 세 의심 질환 모두 50% 이하의 확률을 가질 때 이 컨텍스트를 사용합니다.",
+  "rules": [
+    {
+      "rule_id": "re_1.a",
+      "description": "기존 intake_summary_report를 기반으로, 부족하거나 모호했던 정보를 보강하기 위한 추가 질문을 합니다."
+    },
+    {
+      "rule_id": "re_1.b",
+      "description": "아래 세 가지 전략(Clarification, Expansion, Contextualization)을 활용하여 필수 수집 정보(주요_증상, 수면, 식욕_체중, 활력_에너지, 신체증상)를 구체화합니다."
+    },
+    {
+      "rule_id": "re_1.c",
+      "description": "추가 정보 수집 후 intake_summary_report를 보강하여 다시 2단계(hypothesis)로 진행합니다."
+    }
+  ],
   "strategies": [
     {
       "type": "Clarification (명확화)",
@@ -17,6 +33,27 @@
       "example": "그 증상이 특정 시간대나 상황에서 더 심해지나요?"
     }
   ],
-  "goal": "새로운 단서를 발견하여 Intake Summary Report를 보강하고, 다시 Hypothesis 단계로 진입하여 더 정확한 질환 후보를 도출하는 것."
+  "mandatory_fields_to_reinforce": [
+    {
+      "field_name": "주요_증상",
+      "reinforce_guide": "증상의 성격, 강도, 유발 요인 등을 더 구체적으로 파악합니다."
+    },
+    {
+      "field_name": "수면",
+      "reinforce_guide": "수면 문제의 패턴, 수면 시간, 수면의 질 등을 상세히 확인합니다."
+    },
+    {
+      "field_name": "식욕_체중",
+      "reinforce_guide": "식습관 변화의 정도, 체중 변화량 등을 구체적으로 파악합니다."
+    },
+    {
+      "field_name": "활력_에너지",
+      "reinforce_guide": "에너지 수준의 변화, 집중력 문제의 구체적 상황을 확인합니다."
+    },
+    {
+      "field_name": "신체증상",
+      "reinforce_guide": "신체 증상의 빈도, 위치, 강도 등을 더 상세히 파악합니다."
+    }
+  ],
+  "goal": "새로운 단서를 발견하여 Intake Summary Report를 보강하고, 다시 Hypothesis 단계로 진입하여 더 정확한 질환 후보를 도출합니다."
 }
-

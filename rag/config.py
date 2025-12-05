@@ -40,6 +40,7 @@ KNOWN_DISORDERS = [
   "Developmental Coordination Disorder",
   "Stereotypic Movement Disorder",
   "Tourette's Disorder",
+  "Tic Disorders",
   "Persistent (Chronic) Motor or Vocal Tic Disorder",
   "Provisional Tic Disorder",
   "Other Specified Tic Disorder",

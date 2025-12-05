@@ -1,5 +1,6 @@
 # rag/embeddings.py
 
+'''
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
 def get_embeddings():
@@ -7,4 +8,13 @@ def get_embeddings():
     return HuggingFaceEmbeddings(
         model_name="jinaai/jina-embeddings-v3",
         model_kwargs={"trust_remote_code": True}
+    )
+'''
+
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
+def get_embeddings():
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"}   # gpu 쓰면 "cuda"
     )

@@ -45,6 +45,7 @@ PDF_TO_DISORDER = {
     "anxietyandpanic.pdf": "Generalized Anxiety Disorder / Panic Disorder",
     "bipolar.pdf": "Bipolar I Disorder / Bipolar II Disorder",
     "ptsd.pdf": "Posttraumatic Stress Disorder",
+    "adhd.pdf": "Attention-Deficit/Hyperactivity Disorder",
 }
 
 

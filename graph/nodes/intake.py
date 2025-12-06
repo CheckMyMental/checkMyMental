@@ -40,8 +40,12 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     is_re_intake = state.get('is_re_intake', False)
     
     # 3. 프롬프트 및 컨텍스트 로드
-    # 프롬프트 파일 경로 (프로젝트 루트 기준)
-    prompt_path = Path("prompts/stage1_intake.md")
+    # 프롬프트 파일 경로 (프로젝트 루트 기준) - Re-Intake 여부에 따라 분기
+    if is_re_intake:
+        prompt_path = Path("prompts/stage1_re_intake.md")
+    else:
+        prompt_path = Path("prompts/stage1_intake.md")
+
     try:
         if prompt_path.exists():
             with open(prompt_path, "r", encoding="utf-8") as f:

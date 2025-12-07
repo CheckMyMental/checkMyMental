@@ -11,8 +11,9 @@ def hypothesis_node(state: CounselingState) -> Dict[str, Any]:
     - RAG 검색을 통해 의심 질환 후보 및 진단 기준 도출
     - 다음 단계(Validation)를 위한 State 업데이트
     """
-    
-    print("--- [Node] Hypothesis Generation ---")
+    print("=" * 60)
+    print("[Stage 2: Hypothesis] 노드 실행 시작")
+    print("=" * 60)
     
     # 1. 입력 데이터 확인 (Intake Summary Report)
     intake_summary = state.get("intake_summary_report")

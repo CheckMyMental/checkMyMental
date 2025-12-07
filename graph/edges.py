@@ -12,10 +12,15 @@ def check_intake_complete(state: CounselingState) -> Literal["hypothesis", "__en
        '정보 수집이 완료되었으니 즉시 다음 노드를 실행할지'를 결정해야 함.)
     """
     # 요약 리포트가 있으면 정보 수집 완료 -> Hypothesis로 자동 진행
-    if state.get("intake_summary_report"):
+    intake_summary = state.get("intake_summary_report")
+    if intake_summary:
+        print(f"[Edges] ✓ Intake 완료 확인 - intake_summary_report 생성됨 (길이: {len(intake_summary)} 문자)")
+        print(f"[Edges] → 다음 단계: Hypothesis")
         return "hypothesis"
     
     # 아직 정보 수집 중 -> 사용자 입력을 받기 위해 멈춤
+    print(f"[Edges] ⏸ Intake 진행 중 - intake_summary_report 미생성, 사용자 입력 대기")
+    print(f"[Edges] 현재 상태: domain_active={state.get('domain_questions_active', False)}, current_domain={state.get('current_domain', None)}")
     return "__end__"
 
 def check_validation_outcome(state: CounselingState) -> Literal["severity", "intake", "__end__"]:

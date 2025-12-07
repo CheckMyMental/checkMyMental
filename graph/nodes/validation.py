@@ -1,11 +1,10 @@
 import json
 import re
-from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
 from frontend.gemini_api import ask_gemini
-from frontend.context_handler import load_context_from_file
+from frontend.context_handler import load_context_from_file, load_prompt_from_file
 
 def validation_node(state: CounselingState) -> Dict[str, Any]:
     """
@@ -15,6 +14,9 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     - 2턴~: 사용자 응답 수집 및 진행
     - 마지막: 모든 답변 수집 후 확률 계산 및 결과 도출
     """
+    print("=" * 60)
+    print("[Stage 3: Validation] 노드 실행 시작")
+    print("=" * 60)
     
     messages = state['messages']
     last_message = messages[-1] if messages else None
@@ -40,19 +42,21 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     # 2. 이 질문 리스트를 프롬프트에 포함하여 매 턴마다 진행 상황을 추적하게 함.
     #    (State에 저장하지 않고 대화 맥락으로 유지)
     
-    # 프롬프트 로드
-    prompt_path = Path("prompts/stage3_validation.md")
-    try:
-        if prompt_path.exists():
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                base_prompt = f.read()
-        else:
-            base_prompt = "기본 프롬프트 로드 실패"
-    except Exception as e:
-        base_prompt = f"프롬프트 로드 오류: {e}"
+    # 프롬프트 로드 (매번 새로 로드하여 최신 상태 유지)
+    print(f"[Validation Node] 프롬프트 및 컨텍스트 파일 로드 시작...")
+    base_prompt = load_prompt_from_file("stage3_validation.md")
+    if not base_prompt:
+        base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
+        print(f"[Validation Node] ⚠ 프롬프트 파일 로드 실패: stage3_validation.md")
+    else:
+        print(f"[Validation Node] ✓ 프롬프트 로드 완료: stage3_validation.md ({len(base_prompt)} 문자)")
 
-    # Context 로드
+    # Context 로드 (매번 새로 로드)
     validation_context = load_context_from_file("stage_specific/context_stage3_validation.json")
+    if validation_context:
+        print(f"[Validation Node] ✓ 컨텍스트 로드 완료: context_stage3_validation.json ({len(validation_context)} 문자)")
+    else:
+        print(f"[Validation Node] ⚠ 컨텍스트 로드 실패: context_stage3_validation.json")
     
     # 시스템 지시사항 구성
     # 상황에 따라 프롬프트를 다르게 구성 (질문 생성 vs 결과 분석)
@@ -61,42 +65,81 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     # 간단히: 이전 AI 메시지에 "questions_generated": true 표식이 있는지 등으로 판단 가능.
     # 하지만 LLM에게 현재 대화 맥락을 주고 판단하게 하는 것이 가장 유연함.
     
-    system_instructions = f"""
-{base_prompt}
+    # JSON 데이터를 먼저 문자열로 변환 (f-string 밖에서)
+    criteria_json = json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)
+    
+    # 문자열 연결을 사용하여 JSON 중괄호 문제 완전히 방지
+    # f-string을 사용 중이라면 아래와 같이 수정하세요
+    # JSON 데이터 문자열 준비
+    criteria_json_str = json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)
 
-## 현재 상담 진행 상황
-- **의심 질환 및 기준**:
-{json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)}
+# 예시 JSON도 그냥 문자열
+    validation_json_example = '{"질환A": 0.7, "질환B": 0.4}'
+
+# ★ f-string 금지 — 그냥 문자열 이어붙이기
+    system_instructions = (
+    base_prompt
+    + "\n\n## 현재 상담 진행 상황\n- **의심 질환 및 기준**:\n"
+    + criteria_json_str
+    + """
 
 ## Validation 단계 처리 지침
-1. **(질문 생성)**: 아직 질문 리스트가 생성되지 않았다면, 위 의심 질환들을 검증하기 위한 질문 리스트(JSON)를 생성하고 첫 번째 질문을 사용자에게 던지세요.
-2. **(응답 수집)**: 사용자가 답변을 하면, 다음 질문을 이어서 하세요.
-3. **(결과 분석)**: 모든 질문에 대한 답변이 수집되었다면, 각 질환별 확률을 계산하고 결과를 도출하세요.
+1. (질문 생성): 아직 질문 리스트가 생성되지 않았다면, 위 의심 질환들을 검증하기 위한 질문 리스트(JSON)를 생성하고 첫 번째 질문을 사용자에게 던지세요.
+2. (응답 수집): 사용자가 답변을 하면, 다음 질문을 이어서 하세요.
+3. (결과 분석): 모든 질문에 대한 답변이 수집되었다면, 각 질환별 확률을 계산하고 결과를 도출하세요.
 
 ## 출력 제어
-- **질문 진행 중**: 사용자에게는 한 번에 하나의 질문만 하세요. (5지선다 옵션 포함)
-- **완료 시**: 
-    - `Validated String:` 태그 뒤에 최종 확정된 질환명(Top 1)을 적으세요. (확률 50% 미만이면 "None" 표기)
-    - `Validation JSON:` 태그 뒤에 각 질환별 계산된 확률 정보를 JSON으로 출력하세요.
-    
-## Internal Data Format
----INTERNAL_DATA---
-Validated String: [질환명 or None]
-Validation JSON: {"질환A": 0.7, "질환B": 0.4, ...}
-"""
+- 질문 진행 중: 사용자에게는 한 번에 하나의 질문만 하세요. (5지선다 포함)
+- 완료 시:
+    - `Validated String:` 뒤에 최종 확정된 질환명 (없으면 None)
+    - `Validation JSON:` 뒤에 각 질환별 확률 JSON 하나 출력
 
-    # LLM 호출
-    full_context = f"{system_instructions}\n\n## Context Data\n{validation_context}"
+## Internal Data Format
+Validated String: [질환명 또는 None]
+Validation JSON: """
+    + validation_json_example
+)
+
+
+    # LLM 호출 (f-string 대신 일반 문자열 연결 사용)
+    full_context = system_instructions + "\n\n## Context Data\n" + validation_context
     
-    # 히스토리 처리 (ask_gemini 사용)
-    # 이전 대화 맥락이 있어야 질문 순서를 기억함
-    history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
-    previous_history = history[:-1] if history else [] # 현재 user_input 제외
+    # 히스토리 처리: Validation 단계에 필요한 메시지만 필터링
+    # Validation 단계는 Hypothesis 이후에 시작되므로, Hypothesis 결과 이후의 메시지만 필요
+    # 또는 Validation 관련 메시지만 추출
+    history = []
+    found_validation_start = False
+    
+    # 메시지를 역순으로 탐색하여 Validation 단계 시작점 찾기
+    for msg in reversed(messages[:-1]):  # 현재 메시지 제외
+        if isinstance(msg, AIMessage):
+            # Hypothesis 단계의 결과 메시지 이후부터 Validation 메시지
+            if "의심 질환" in msg.content or "질환 후보" in msg.content:
+                found_validation_start = True
+                break
+            if found_validation_start or "Validation" in msg.content or "검증" in msg.content:
+                history.insert(0, {"role": "model", "content": msg.content})
+        elif isinstance(msg, HumanMessage):
+            if found_validation_start:
+                history.insert(0, {"role": "user", "content": msg.content})
+    
+    # Validation 관련 메시지가 없으면 최근 몇 개만 사용 (너무 많은 히스토리 방지)
+    if not history:
+        recent_messages = messages[-6:-1] if len(messages) > 1 else []  # 최근 3쌍 (6개 메시지)
+        history = [
+            {"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content}
+            for m in recent_messages
+        ]
+    else:
+        # Validation 관련 메시지만 최근 10개로 제한
+        history = history[-10:]
+    
+    print(f"[Validation Node] 히스토리 메시지 수: {len(history)}개 (전체: {len(messages)}개)")
     
     response_text = ask_gemini(
         user_input=user_input if user_input else "Validation 단계를 시작합니다. 질문을 생성해주세요.",
         context=full_context,
-        conversation_history=previous_history
+        conversation_history=history
     )
     
     # 응답 파싱

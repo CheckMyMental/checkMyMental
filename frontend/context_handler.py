@@ -3,27 +3,48 @@
 
 import os
 from pathlib import Path
+import json
+
+# 프로젝트 루트 디렉토리 (frontend 폴더의 상위 디렉토리)
+PROJECT_ROOT = Path(__file__).parent.parent
+
+# Context 파일들이 저장될 디렉토리
+CONTEXT_DIR = PROJECT_ROOT / "contexts"
+
+# Prompts 파일들이 저장될 디렉토리
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 
-# Context 파일들이 저장될 디렉토리 (상위 폴더의 contexts)
-CONTEXT_DIR = Path(__file__).parent.parent / "contexts"
+def get_project_root() -> Path:
+    """프로젝트 루트 경로를 반환합니다."""
+    return PROJECT_ROOT
 
 
-# 지정된 이름의 파일(.txt나 .md)에서 context를 읽어서 문자열로 반환
+# 지정된 이름의 파일(.txt나 .md, .json)에서 context를 읽어서 문자열로 반환
 def load_context_from_file(filename: str) -> str:
-    # 파일에서 context를 읽어옵니다.
+    """
+    Context 파일을 읽어서 문자열로 반환합니다.
+    
+    Args:
+        filename: contexts 폴더 기준 상대 경로 (예: "stage_specific/context_stage1_intake.json")
+    
+    Returns:
+        파일 내용 (문자열), 파일이 없으면 빈 문자열
+    """
     file_path = CONTEXT_DIR / filename
     
     if not file_path.exists():
-        print(f"[Context Handler] 파일을 찾을 수 없습니다: {filename}")
+        print(f"[Context Handler] ⚠ 파일을 찾을 수 없습니다: {file_path}")
+        print(f"[Context Handler]    찾는 경로: {filename}")
         return ""
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
+            print(f"[Context Handler] ✓ 파일 로드 성공: {filename} (길이: {len(content)} 문자)")
             return content
     except Exception as e:
-        print(f"[Context Handler] Context 파일 읽기 오류 ({filename}): {e}")
+        print(f"[Context Handler] ✗ Context 파일 읽기 오류 ({filename}): {e}")
         return ""
 
 
@@ -50,15 +71,43 @@ def get_context(context_name: str = None) -> str:
     return context
 
 
+def load_prompt_from_file(filename: str) -> str:
+    """
+    Prompt 파일을 읽어서 문자열로 반환합니다.
+    
+    Args:
+        filename: prompts 폴더 기준 상대 경로 (예: "stage1_intake.md")
+    
+    Returns:
+        파일 내용 (문자열), 파일이 없으면 빈 문자열
+    """
+    file_path = PROMPTS_DIR / filename
+    
+    if not file_path.exists():
+        print(f"[Prompt Handler] ⚠ 파일을 찾을 수 없습니다: {file_path}")
+        print(f"[Prompt Handler]    찾는 경로: {filename}")
+        return ""
+    
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            print(f"[Prompt Handler] ✓ 파일 로드 성공: {filename} (길이: {len(content)} 문자)")
+            return content
+    except Exception as e:
+        print(f"[Prompt Handler] ✗ Prompt 파일 읽기 오류 ({filename}): {e}")
+        return ""
+
+
 # 사용 가능한 context 파일 목록을 반환하는 함수
 def list_context_files() -> list:
     if not CONTEXT_DIR.exists():
         return []
     
     files = []
-    for file_path in CONTEXT_DIR.iterdir():
-        if file_path.is_file() and file_path.suffix in [".txt", ".md"]:
-            files.append(file_path.name)
+    for file_path in CONTEXT_DIR.rglob("*"):  # 재귀적으로 검색
+        if file_path.is_file() and file_path.suffix in [".txt", ".md", ".json"]:
+            relative_path = file_path.relative_to(CONTEXT_DIR)
+            files.append(str(relative_path))
     
     return sorted(files)
 

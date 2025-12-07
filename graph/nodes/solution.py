@@ -1,10 +1,9 @@
 import json
-from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
 from frontend.gemini_api import ask_gemini
-from frontend.context_handler import load_context_from_file
+from frontend.context_handler import load_context_from_file, load_prompt_from_file
 from api.rag_service import retrieve_solution
 
 def solution_node(state: CounselingState) -> Dict[str, Any]:
@@ -14,6 +13,9 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     - RAG 검색을 통한 맞춤형 솔루션 도출
     - 최종 사용자 응답 생성
     """
+    print("=" * 60)
+    print("[Stage 5: Solution] 노드 실행 시작")
+    print("=" * 60)
     
     # 1. 필수 데이터 확인
     diagnosis = state.get("severity_diagnosis")
@@ -56,15 +58,10 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
         rag_solution_context = "(관련 솔루션 자료를 찾지 못했습니다. 일반적인 정신 건강 지침을 제공해주세요.)"
 
     # 3. 프롬프트 및 컨텍스트 로드
-    prompt_path = Path("prompts/stage5_solution.md")
-    try:
-        if prompt_path.exists():
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                base_prompt = f.read()
-        else:
-            base_prompt = "기본 프롬프트 로드 실패"
-    except Exception as e:
-        base_prompt = f"프롬프트 로드 오류: {e}"
+    base_prompt = load_prompt_from_file("stage5_solution.md")
+    if not base_prompt:
+        base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
+        print(f"[Solution Node] ⚠ 프롬프트 파일 로드 실패: stage5_solution.md")
         
     solution_context_guide = load_context_from_file("stage_specific/context_stage5_solution.json")
 

@@ -13,7 +13,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # GEMINI_API_KEY가 환경 변수에 설정되어 있는지 확인
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(api_key="")
 else:
     raise ValueError(
         "GEMINI_API_KEY가 환경 변수에 설정되지 않았습니다. .env 파일을 확인해주세요."
@@ -38,44 +38,54 @@ def ask_gemini(
 ) -> str:
     try:
         # 모델 초기화
-        model = genai.GenerativeModel("gemini-2.0-flash")
-
-        # 프롬프트 구성
-        prompt = user_input
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         # 컨텍스트 처리: context 파라미터가 없으면 파일에서 로드
         if context is None and context_file is not None:
             context = get_context(context_file)
         elif context is None:
-            # 기본 context 파일 사용
-            context = get_context()
+            # 기본 context 파일 사용 (context_file이 명시되지 않은 경우에만)
+            pass
 
-        # 컨텍스트가 있으면 추가
+        # 프롬프트 구성 (context와 conversation_history를 모두 포함)
+        prompt_parts = []
+
+        # 1. 컨텍스트가 있으면 먼저 추가 (시스템 지시사항, 프롬프트 등)
         if context:
-            prompt = f"""
-            다음 정보를 참고하여 사용자의 질문에 답변해주세요.
-            {context}
-            사용자 질문: {user_input}
-            """
+            prompt_parts.append(context)
 
-        # 대화 히스토리가 있으면 포함
+        # 2. 대화 히스토리가 있으면 추가 (각 단계별로 필요한 만큼만)
         if conversation_history:
-            # 히스토리를 프롬프트에 포함
+            # 히스토리 길이 제한 (최대 10개 메시지 = 5쌍)
+            limited_history = conversation_history[-10:]
             history_text = "\n".join(
                 [
-                    f"{'사용자' if msg['role'] == 'user' else '상담사'}: {msg['content']}"
-                    for msg in conversation_history[-5:]  # 최근 5개만 포함
+                    f"{'사용자' if msg['role'] == 'user' else '상담사'}: {msg['content'][:200]}..." if len(msg['content']) > 200 else f"{'사용자' if msg['role'] == 'user' else '상담사'}: {msg['content']}"
+                    for msg in limited_history
                 ]
             )
-            prompt = f"""
-            이전 대화:      
-            {history_text}
+            prompt_parts.append(f"## 이전 대화 기록 (최근 {len(limited_history)}개 메시지)\n{history_text}\n")
 
-            현재 사용자 질문: {user_input}
-            """
+        # 3. 현재 사용자 입력 추가
+        prompt_parts.append(f"## 현재 사용자 입력\n{user_input}")
+
+        # 최종 프롬프트 조합
+        if len(prompt_parts) > 1:
+            prompt = "\n\n".join(prompt_parts)
+        else:
+            prompt = user_input
+
+        # 디버깅: 프롬프트 구성 확인
+        print(f"[Gemini API] 프롬프트 구성 완료:")
+        print(f"  - 전체 길이: {len(prompt)} 문자")
+        print(f"  - 컨텍스트 포함: {'예' if context else '아니오'}")
+        print(f"  - 히스토리 포함: {'예' if conversation_history else '아니오'} (최근 {len(conversation_history) if conversation_history else 0}개 메시지)")
+        print(f"  - 프롬프트 미리보기 (처음 300자):\n{prompt[:300]}...")
 
         # API 호출
         response = model.generate_content(prompt)
+
+        print(f"[Gemini API] 응답 수신 완료 (길이: {len(response.text)} 문자)")
 
         return response.text
 

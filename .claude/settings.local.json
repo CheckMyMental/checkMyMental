@@ -3,7 +3,9 @@
     "allow": [
       "Bash(dir \"C:\\Ai\\curemind\\checkMyMental\\contexts\\stage_specific\")",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

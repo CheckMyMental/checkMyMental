@@ -66,6 +66,9 @@ class GraphClient:
         """
         사용자 입력을 그래프에 전달하고 실행 (Blocking)
         
+        LangGraph의 checkpointer를 사용하면, 기존 상태가 자동으로 로드되고
+        새로운 initial_state가 병합됩니다. 그래프는 END에 도달할 때까지 실행됩니다.
+        
         Args:
             user_input: 사용자 입력 메시지
             thread_id: 세션 ID
@@ -76,13 +79,33 @@ class GraphClient:
         config = self.get_config(thread_id)
         
         # 입력 상태 생성 (HumanMessage 추가)
+        # checkpointer가 있으면 기존 상태와 자동 병합됨
         initial_state = {
             "messages": [HumanMessage(content=user_input)]
         }
         
-        # 그래프 실행
-        result = self.graph.invoke(initial_state, config=config)
-        return result
+        print(f"[GraphClient] 그래프 실행 시작 - thread_id: {thread_id}")
+        print(f"[GraphClient] 사용자 입력: {user_input[:100]}...")
+        
+        try:
+            # 그래프 실행 (END에 도달할 때까지 자동 진행)
+            result = self.graph.invoke(initial_state, config=config)
+            
+            # 실행 결과 로그
+            intake_summary = result.get("intake_summary_report")
+            if intake_summary:
+                print(f"[GraphClient] ✓ intake_summary_report 생성됨 (길이: {len(intake_summary)} 문자)")
+            print(f"[GraphClient] 실행 완료 - 메시지 수: {len(result.get('messages', []))}")
+            
+            return result
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            print(f"[GraphClient] ✗ 그래프 실행 중 오류 발생: {error_msg}")
+            print(f"[GraphClient] 오류 타입: {type(e).__name__}")
+            print(f"[GraphClient] 상세 traceback:")
+            traceback.print_exc()
+            raise  # 상위로 전파
 
     def stream_graph(self, user_input: str, thread_id: str) -> Generator[Dict[str, Any], None, None]:
         """

@@ -278,7 +278,10 @@ Summary String:
         parts = response_text.split("---INTERNAL_DATA---")
         user_message = parts[0].strip()
         internal_data = parts[1].strip()
-    
+        if state.get("is_re_intake"):
+            if "?" in response_text:
+                state["re_intake_questions_asked"] = state.get("re_intake_questions_asked", 0) + 1
+
     # 필수 필드 수집 상태 추적
     field_status = {
         "주요_증상": "미수집",

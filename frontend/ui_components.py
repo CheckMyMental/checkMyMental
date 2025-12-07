@@ -69,42 +69,169 @@ def render_sidebar():
     st.sidebar.markdown("---")
     
     # --- 디버그/상태 패널 (개발자용) ---
-    with st.sidebar.expander("🛠️ 디버그 패널 (상태 정보)", expanded=False):
+    with st.sidebar.expander("🛠️ 디버그 패널 (상태 정보)", expanded=True):
         if "thread_id" in st.session_state:
-            st.markdown(f"**Session ID:** `{st.session_state.thread_id}`")
-            
+            st.markdown(f"**Session ID:** `{st.session_state.thread_id[:8]}...`")
+
             client = get_graph_client()
             try:
                 snapshot = client.get_state_snapshot(st.session_state.thread_id)
                 state_values = snapshot.get("values", {})
-                
-                st.markdown("### Current State Data")
-                
-                # 1단계: 요약 리포트
-                if state_values.get("intake_summary_report"):
-                    st.info("✅ Intake Summary Available")
-                    with st.popover("Show Summary"):
-                        st.code(state_values["intake_summary_report"])
-                
-                # 2단계: 가설
-                if state_values.get("hypothesis_criteria"):
-                    st.success("✅ Hypothesis Criteria")
-                    with st.popover("Show Criteria"):
-                        st.json(state_values["hypothesis_criteria"])
-                
-                # 3단계: 검증 결과
-                if state_values.get("validation_probabilities"):
-                     st.warning("✅ Validation Probs")
-                     st.write(state_values["validation_probabilities"])
-                
+                next_nodes = snapshot.get("next", [])
+
+                # 현재 노드 표시
+                current_node = next_nodes[0] if next_nodes else "unknown"
+                st.markdown(f"**다음 실행 노드:** `{current_node}`")
+                st.markdown("---")
+
+                # ========== Stage 1: Intake ==========
+                st.markdown("### 📝 Stage 1: Intake")
+                intake_summary = state_values.get("intake_summary_report")
+                domain_active = state_values.get("domain_questions_active", False)
+                current_domain = state_values.get("current_domain")
+
+                if intake_summary:
+                    st.success("✅ **intake_summary_report** 생성됨")
+                    st.caption(f"길이: {len(intake_summary)} 문자")
+                    with st.expander("요약 내용 보기"):
+                        st.text(intake_summary[:300] + "...")
+                    st.info("→ **다음 단계**: Hypothesis로 자동 이동")
+                else:
+                    st.warning("⏳ **intake_summary_report** 대기 중")
+                    st.caption("5가지 필수 정보 수집 필요:")
+                    st.caption("• Chief Complaint (주 호소)")
+                    st.caption("• Onset (시작 시기)")
+                    st.caption("• Frequency & Duration (빈도/지속)")
+                    st.caption("• Impairment (일상생활 지장)")
+                    st.caption("• History (과거력)")
+
+                if domain_active:
+                    st.info(f"🔍 도메인 심화 질문 진행 중: **{current_domain}**")
+
+                st.markdown("---")
+
+                # ========== Stage 2: Hypothesis ==========
+                st.markdown("### 🔬 Stage 2: Hypothesis")
+                hypothesis_criteria = state_values.get("hypothesis_criteria")
+
+                if hypothesis_criteria:
+                    st.success(f"✅ **hypothesis_criteria** 생성됨 ({len(hypothesis_criteria)}개)")
+                    with st.expander("진단 기준 보기"):
+                        for i, criteria in enumerate(hypothesis_criteria[:3], 1):
+                            st.caption(f"{i}. {criteria[:100]}...")
+                    st.info("→ **다음 단계**: Validation으로 무조건 이동")
+                else:
+                    st.warning("⏳ **hypothesis_criteria** 대기 중")
+                    st.caption("RAG 검색으로 의심 질환 후보 도출")
+
+                st.markdown("---")
+
+                # ========== Stage 3: Validation ==========
+                st.markdown("### ✅ Stage 3: Validation")
+                validation_probs = state_values.get("validation_probabilities")
+                is_re_intake = state_values.get("is_re_intake", False)
+                severity_diagnosis = state_values.get("severity_diagnosis")
+
+                if validation_probs:
+                    st.success("✅ **validation_probabilities** 계산됨")
+
+                    # 확률 표시
+                    max_prob = max(validation_probs.values()) if validation_probs else 0
+                    max_disease = max(validation_probs.items(), key=lambda x: x[1])[0] if validation_probs else "None"
+
+                    st.metric("최대 확률", f"{max_prob:.1%}", delta=f"{max_disease}")
+
+                    with st.expander("전체 확률 보기"):
+                        for disease, prob in validation_probs.items():
+                            st.caption(f"• {disease}: {prob:.1%}")
+
+                    # 다음 단계 결정
+                    if is_re_intake:
+                        st.error("→ **Re-Intake**: 확률 ≤ 0.5 → Stage 1로 복귀")
+                    elif severity_diagnosis:
+                        st.info(f"→ **Severity 진행**: 확정 진단 `{severity_diagnosis}`")
+                    else:
+                        st.warning("⚠️ 상태 불일치 (확률은 있지만 진단명 없음)")
+                else:
+                    st.warning("⏳ **validation_probabilities** 대기 중")
+                    st.caption("5지선다 질문으로 확률 계산 필요")
+
+                if severity_diagnosis and not is_re_intake:
+                    st.success(f"✅ **severity_diagnosis** 설정: `{severity_diagnosis}`")
+
+                st.markdown("---")
+
+                # ========== Stage 4: Severity ==========
+                st.markdown("### 📊 Stage 4: Severity")
+                severity_result = state_values.get("severity_result_string")
+
+                if severity_result:
+                    st.success("✅ **severity_result_string** 생성됨")
+                    st.caption(f"길이: {len(severity_result)} 문자")
+                    with st.expander("심각도 평가 결과 보기"):
+                        st.text(severity_result[:200] + "...")
+                    st.info("→ **다음 단계**: Solution으로 자동 이동")
+                else:
+                    if severity_diagnosis:
+                        st.warning("⏳ **severity_result_string** 대기 중")
+                        st.caption(f"대상 질환: {severity_diagnosis}")
+                    else:
+                        st.caption("아직 Stage 3 미완료")
+
+                st.markdown("---")
+
+                # ========== Stage 5: Solution ==========
+                st.markdown("### 💡 Stage 5: Solution")
+                final_summary = state_values.get("final_summary_string")
+                solution_content = state_values.get("solution_content")
+
+                if solution_content:
+                    st.success("✅ **solution_content** 생성됨")
+                    st.caption("상담 완료!")
+                elif final_summary:
+                    st.info("🔄 최종 요약 생성 중...")
+                else:
+                    st.caption("아직 Stage 4 미완료")
+
+                st.markdown("---")
+
+                # ========== 전환 조건 요약 ==========
+                with st.expander("📋 전환 조건 요약표"):
+                    st.markdown("""
+**Intake → Hypothesis**
+- 조건: `intake_summary_report` 존재
+- 현재: """ + ("✅ 충족" if intake_summary else "❌ 미충족") + """
+
+**Hypothesis → Validation**
+- 조건: 무조건 이동
+- 현재: """ + ("✅" if hypothesis_criteria else "⏳") + """
+
+**Validation → Severity or Intake**
+- Severity 조건: `severity_diagnosis` 존재 & `is_re_intake=False`
+- Re-Intake 조건: `is_re_intake=True`
+- 현재: """ + (
+    "✅ Severity 진행" if (severity_diagnosis and not is_re_intake) else
+    "🔄 Re-Intake" if is_re_intake else
+    "❌ 미충족"
+) + """
+
+**Severity → Solution**
+- 조건: `severity_result_string` 존재
+- 현재: """ + ("✅ 충족" if severity_result else "❌ 미충족") + """
+
+**Solution → END**
+- 조건: 무조건 종료
+                    """)
+
                 # 전체 State Raw View
-                if st.checkbox("Show Raw State"):
-                    st.json({k: v for k, v in state_values.items() if k != "messages"})
-                    
+                if st.checkbox("🔧 Show Raw State (전체)"):
+                    st.json({k: str(v)[:100] + "..." if isinstance(v, str) and len(v) > 100 else v
+                             for k, v in state_values.items() if k != "messages"})
+
             except Exception as e:
-                st.error(f"Error fetching state: {e}")
+                st.error(f"❌ State 로드 오류: {e}")
         else:
-            st.text("Session not initialized")
+            st.warning("⚠️ Session not initialized")
 
     st.sidebar.markdown("---")
 

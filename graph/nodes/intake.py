@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_gemini
 from frontend.context_handler import load_context_from_file, load_prompt_from_file
 
 def intake_node(state: CounselingState) -> Dict[str, Any]:
@@ -39,15 +39,26 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     domain_active = state.get('domain_questions_active', False)
     current_domain = state.get('current_domain', None)
     is_re_intake = state.get('is_re_intake', False)
+    existing_intake_summary = state.get('intake_summary_report', '')  # Re-Intake 모드에서 기존 Summary 보존
     
     # 3. 프롬프트 및 컨텍스트 로드 (매번 새로 로드)
     print(f"[Intake Node] 프롬프트 및 컨텍스트 파일 로드 시작...")
-    base_prompt = load_prompt_from_file("stage1_intake.md")
-    if not base_prompt:
-        base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
-        print(f"[Intake Node] ⚠ 프롬프트 파일 로드 실패: stage1_intake.md")
+    
+    # Re-Intake 모드일 때는 re_intake 프롬프트 사용
+    if is_re_intake:
+        base_prompt = load_prompt_from_file("stage1_re_intake.md")
+        if not base_prompt:
+            base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
+            print(f"[Intake Node] ⚠ 프롬프트 파일 로드 실패: stage1_re_intake.md")
+        else:
+            print(f"[Intake Node] ✓ Re-Intake 프롬프트 로드 완료: stage1_re_intake.md ({len(base_prompt)} 문자)")
     else:
-        print(f"[Intake Node] ✓ 프롬프트 로드 완료: stage1_intake.md ({len(base_prompt)} 문자)")
+        base_prompt = load_prompt_from_file("stage1_intake.md")
+        if not base_prompt:
+            base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
+            print(f"[Intake Node] ⚠ 프롬프트 파일 로드 실패: stage1_intake.md")
+        else:
+            print(f"[Intake Node] ✓ 프롬프트 로드 완료: stage1_intake.md ({len(base_prompt)} 문자)")
 
     context_data = {}
     
@@ -93,9 +104,29 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
         recent_messages = "\n".join([msg.content for msg in messages[-10:] if isinstance(msg, (HumanMessage, AIMessage))])
         collected_fields_hint = f"\n## 현재까지 수집된 정보 힌트\n(다음 대화 기록을 분석하여 이미 수집된 필수 필드를 파악하세요)\n{recent_messages[:1000]}\n"
     
+    # Re-Intake 모드일 때 기존 Summary 포함
+    existing_summary_section = ""
+    if is_re_intake and existing_intake_summary:
+        existing_summary_section = f"""
+
+## ⚠️⚠️⚠️ 매우 중요: 기존 Intake Summary Report (절대 변경 금지!)
+다음은 이전에 수집된 정보입니다. **주요_증상 필드는 절대 변경하지 마세요!** 기존 내용을 그대로 유지해야 합니다.
+
+```
+{existing_intake_summary}
+```
+
+**Re-Intake 모드 규칙:**
+1. **주요_증상 필드는 절대 변경하거나 다시 질문하지 마세요!** 기존 내용을 그대로 유지해야 합니다.
+2. 다른 필드(수면, 식욕_체중, 활력_에너지, 신체증상)만 보강하거나 구체화하세요.
+3. 새로운 정보를 수집한 후, 기존 Summary에 추가 정보만 병합하여 보강된 Summary를 생성하세요.
+4. Summary 생성 시 기존 주요_증상을 그대로 포함하고, 다른 필드는 새로운 정보로 보강하세요.
+"""
+    
     system_instructions = f"""
 {base_prompt}
 {collected_fields_hint}
+{existing_summary_section}
 
 ## 현재 상담 상태 정보
 - **Re-Intake 모드**: {"예 (추가 탐색 필요)" if is_re_intake else "아니오 (일반 진행)"}
@@ -104,11 +135,37 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
 
 ## 필수 필드 수집 상태 확인 (매우 중요!)
 **반드시 다음 5가지 필수 필드가 모두 충분히 수집되었는지 확인하세요:**
-1. **주요_증상** (Chief Complaint): 사용자가 상담을 요청한 이유와 현재 기분
-2. **수면** (Sleep): 수면 문제 유형 (불면증, 과다수면, 입면곤란, 수면유지곤란, 이른아침각성, 또는 문제없음)
-3. **식욕_체중** (Appetite & Weight): 식욕/체중 변화 (식욕감소/증가, 체중감소/증가, 또는 문제없음)
-4. **활력_에너지** (Energy & Vitality): 에너지 수준 (피로, 활력상실, 정신운동지연/초조, 집중력감소, 우유부단, 또는 문제없음)
-5. **신체증상** (Somatic Symptoms): 신체적 불편함 (두통, 위장증상, 근육긴장, 심계항진, 호흡곤란, 흉부불편감, 현기증, 이인증, 비현실감, 또는 문제없음)
+1. **주요_증상** (Chief Complaint): 사용자가 상담을 요청한 이유, 현재 기분, 증상의 구체적 내용 (증상의 종류, 강도, 시작 시기, 지속 기간, 악화/완화 요인, 일상생활에 미치는 영향 등 상세한 정보)
+   - **매우 중요**: 주요증상은 반드시 완전한 문장으로 기록해야 합니다!
+   - "우울", "불안" 같은 단어만 쓰지 마세요!
+   - "무엇 때문에 우울한지", "어떤 상황에서 불안한지" 등 원인과 맥락을 포함한 완전한 문장으로 기록하세요!
+   - 예시:
+     * ❌ 잘못된 예: "우울"
+     * ✅ 올바른 예: "최근 직장에서의 스트레스 때문에 우울한 기분이 지속되고 있습니다"
+     * ❌ 잘못된 예: "불안"
+     * ✅ 올바른 예: "시험 기간이 다가오면서 불안감이 심해져서 집중이 잘 안 됩니다"
+   - 주요증상은 사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있을 정도의 설명이면 충분합니다.
+   - 너무 짧은 답변(예: "안 좋아요", "우울해요")만 아니면, 사용자가 자연스럽게 말한 내용을 그대로 수집하면 됩니다.
+   - 불필요하게 반복 질문하지 말고, 사용자의 답변에 자연스럽게 공감하며 필요한 핵심 정보만 수집하세요.
+2. **수면** (Sleep): 수면 문제 유형 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
+   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
+   - 추가 질문 없이 한 번의 답변으로 충분합니다
+   - 허용된 유형: "불면증(insomnia)", "과다수면(hypersomnia)", "입면 곤란(difficulty falling asleep)", "수면 유지 곤란(difficulty staying asleep)", "이른 아침 각성(early morning awakening)", "문제 없음"
+
+3. **식욕_체중** (Appetite & Weight): 식욕/체중 변화 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
+   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
+   - 추가 질문 없이 한 번의 답변으로 충분합니다
+   - 허용된 유형: "식욕 감소(decreased appetite)", "식욕 증가(increased appetite)", "현저한 체중 감소(significant weight loss)", "현저한 체중 증가(significant weight gain)", "문제 없음"
+
+4. **활력_에너지** (Energy & Vitality): 에너지 수준 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
+   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
+   - 추가 질문 없이 한 번의 답변으로 충분합니다
+   - 허용된 유형: "피로(fatigue)", "활력 상실(loss of energy)", "정신운동 지연(psychomotor retardation)", "정신운동 초조(psychomotor agitation)", "집중력 감소(diminished ability to concentrate)", "우유부단(indecisiveness)", "문제 없음"
+
+5. **신체증상** (Somatic Symptoms): 신체적 불편함 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
+   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
+   - 추가 질문 없이 한 번의 답변으로 충분합니다
+   - 허용된 유형: "두통(headache)", "위장 증상(gastrointestinal symptoms)", "근육 긴장(muscle tension)", "심계항진(palpitations)", "호흡곤란(shortness of breath)", "흉부 불편감(chest discomfort)", "현기증(dizziness)", "이인증(depersonalization)", "비현실감(derealization)", "문제 없음"
 
 **중요 규칙:**
 - 위 5가지 필드 중 하나라도 충분히 수집되지 않았다면, `Summary String:`을 생성하지 마세요!
@@ -140,6 +197,44 @@ DOMAIN_DETECTED: [도메인명] (선택사항)
 DOMAIN_COMPLETED: [True] (선택사항)
 Summary String:
 [모든 5가지 필수 필드가 충분히 수집되었을 때만 작성하세요. 각 필드에 대한 구체적인 내용을 포함하세요.]
+
+**카테고리 기록 형식 (매우 중요! DSM-5 임베딩 성능을 위해 필수!)**:
+- 주요_증상: 자유 텍스트 (사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있는 정도)
+  - **매우 중요**: 주요증상은 반드시 완전한 문장으로 기록해야 합니다!
+  - "우울", "불안" 같은 단어만 쓰지 마세요!
+  - "무엇 때문에 우울한지", "어떤 상황에서 불안한지" 등 원인과 맥락을 포함한 완전한 문장으로 기록하세요!
+  - 예시:
+    * ❌ 잘못된 예: "우울"
+    * ✅ 올바른 예: "최근 직장에서의 스트레스 때문에 우울한 기분이 지속되고 있습니다"
+    * ❌ 잘못된 예: "불안"
+    * ✅ 올바른 예: "시험 기간이 다가오면서 불안감이 심해져서 집중이 잘 안 됩니다"
+
+**수면, 식욕_체중, 활력_에너지, 신체증상 필드 질문 규칙 (매우 중요!):**
+- 각 카테고리는 **한 번만 질문**하고, 사용자가 답변하면 바로 `<context_stage1_intake.json>`의 `problem_types` 목록에서 선택하세요!
+- 추가 질문하지 마세요! 사용자의 답변을 받으면 바로 분류하고 다음 필드로 넘어가세요!
+- 각 카테고리는 정해진 목록에서 선택만 하면 되므로, 꼬치꼬치 물어볼 필요가 전혀 없습니다!
+- 예: 
+  * 사용자가 "잠을 잘 못 잤어요"라고 하면 → "불면증(insomnia)" 또는 "입면 곤란"으로 바로 분류하고 추가 질문 금지!
+  * 사용자가 "밥을 잘 안 먹어요"라고 하면 → "식욕 감소(decreased appetite)"로 바로 분류하고 추가 질문 금지!
+  * 사용자가 "매우 피곤해요"라고 하면 → "피로(fatigue)"로 바로 분류하고 추가 질문 금지!
+  * 사용자가 "가슴이 두근거려요"라고 하면 → "심계항진(palpitations)"로 바로 분류하고 추가 질문 금지!
+- 비슷한 의미라도 목록에 없는 용어는 절대로 사용하지 마세요!
+- 각 카테고리는 배열 형식으로 여러 유형을 기록할 수 있습니다 (예: ["불면증(insomnia)", "수면 유지 곤란"])
+- 문제가 없다면 반드시 "문제 없음"으로 기록하세요.
+
+**Summary String 형식 예시:**
+```
+주요_증상: [사용자가 상담을 요청한 이유와 현재 기분에 대한 설명]
+수면: ["불면증(insomnia)", "입면 곤란(difficulty falling asleep)"]
+식욕_체중: ["식욕 감소(decreased appetite)"]
+활력_에너지: ["피로(fatigue)", "집중력 감소(diminished ability to concentrate)"]
+신체증상: ["심계항진(palpitations)"]
+```
+
+**주요_증상 필드 수집 기준 (매우 중요!)**:
+- 주요증상은 사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있을 정도면 충분합니다.
+- 너무 짧은 답변(예: "안 좋아요")만 아니면, 사용자가 자연스럽게 말한 내용을 그대로 수집하면 됩니다.
+- 불필요하게 많은 질문을 반복하지 말고, 사용자의 답변에 자연스럽게 공감하며 핵심 정보만 수집하세요.
 """
 
     # Context 문자열 변환
@@ -263,6 +358,35 @@ Summary String:
             
             # 모든 필드가 수집되었고 Summary에도 포함되어 있으면 수락
             if all_fields_collected and len(missing_fields) == 0:
+                # Re-Intake 모드일 때: 기존 주요_증상 보존
+                if is_re_intake and existing_intake_summary:
+                    # 기존 Summary에서 주요_증상 추출
+                    existing_chief_complaint = ""
+                    if "주요_증상:" in existing_intake_summary or "주요증상:" in existing_intake_summary:
+                        # 기존 Summary에서 주요_증상 부분 추출
+                        for line in existing_intake_summary.split('\n'):
+                            if "주요_증상:" in line or "주요증상:" in line:
+                                # "주요_증상:" 또는 "주요증상:" 뒤의 내용 추출
+                                parts = line.split(":", 1)
+                                if len(parts) > 1:
+                                    existing_chief_complaint = parts[1].strip()
+                                    break
+                    
+                    # 새 Summary에서 주요_증상 부분을 기존 것으로 교체
+                    if existing_chief_complaint:
+                        # 새 Summary에서 주요_증상 라인 찾아서 교체
+                        new_summary_lines = summary_content.split('\n')
+                        for i, line in enumerate(new_summary_lines):
+                            if "주요_증상:" in line or "주요증상:" in line:
+                                # 기존 주요_증상으로 교체
+                                if "주요_증상:" in line:
+                                    new_summary_lines[i] = f"주요_증상: {existing_chief_complaint}"
+                                else:
+                                    new_summary_lines[i] = f"주요증상: {existing_chief_complaint}"
+                                print(f"[Intake Node] ✓ 기존 주요_증상 보존: {existing_chief_complaint[:50]}...")
+                                break
+                        summary_content = '\n'.join(new_summary_lines)
+                
                 new_state["intake_summary_report"] = summary_content
                 print(f"[Intake Node] ✓ 필수 정보 수집 완료 - Summary 생성 및 다음 단계로 진행")
                 print(f"[Intake Node] 필드 수집 상태: {field_status}")

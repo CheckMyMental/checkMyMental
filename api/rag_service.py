@@ -133,5 +133,5 @@ def retrieve_solution(diagnosis: str, symptom_text: Optional[str] = None) -> Dic
         "diagnosis": diagnosis,
         "treatment_category": treatment_category,
         "query": query,
-        "solutions": ordered[:5],
+        "solutions": ordered[:3],  # 최대 3개만 반환
     }

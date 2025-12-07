@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_gemini
 from frontend.context_handler import load_context_from_file, load_prompt_from_file
 from api.rag_service import retrieve_solution
 
@@ -21,9 +21,15 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     diagnosis = state.get("severity_diagnosis")
     if not diagnosis:
         return {"messages": [AIMessage(content="오류: 최종 진단명이 없습니다.")]}
+    
+    # ⚠️ 중요: Severity 단계가 완료되지 않았으면 Solution 단계로 오면 안 됨
+    severity_result = state.get("severity_result_string")
+    if not severity_result:
+        error_msg = "오류: 심각도 평가가 완료되지 않았습니다. 심각도 평가 단계를 먼저 진행해야 합니다."
+        print(f"[Solution Node] ✗ {error_msg}")
+        return {"messages": [AIMessage(content=error_msg)]}
         
     intake_summary = state.get("intake_summary_report", "")
-    severity_result = state.get("severity_result_string", "")
     
     # 통합 요약문 생성 (Final Summary String)
     final_summary_parts = []

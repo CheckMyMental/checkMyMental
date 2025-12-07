@@ -14,17 +14,21 @@ from rag.config import (
     TREATMENT_COLLECTION_NAME,
 )
 
-# 임베딩은 서버 시작 시 한 번만
+# 🔥 추가: DSM → Treatment Category 매핑 함수
+from rag.disorder_classifier import classify_disorder
+
+
+# -----------------------------
+# Embedder & DB 초기화
+# -----------------------------
 _embeddings = get_embeddings()
 
-# DSM 기준 컬렉션
 _dsm_db = Chroma(
     embedding_function=_embeddings,
     persist_directory=CHROMA_DIR,
     collection_name=DSM_COLLECTION_NAME,
 )
 
-# 치료 컬렉션
 _treatment_db = Chroma(
     embedding_function=_embeddings,
     persist_directory=CHROMA_DIR,
@@ -32,21 +36,14 @@ _treatment_db = Chroma(
 )
 
 
+# -----------------------------
+# DSM Hypothesis Search
+# -----------------------------
 def retrieve_candidates(symptom_text: str, top_k: int = 12, diag_top_n: int = 3) -> Dict[str, Any]:
-    """
-    1) 사용자가 말한 증상으로 DSM 컬렉션에서 문단 k개 검색
-    2) 문단들의 metadata.disorder 빈도수로 상위 n개 진단 후보 뽑기
-    3) 각 진단에 대해 criteria 문단(가장 긴 것) 하나씩 붙여서 반환
-    """
-    # 1) 증상 기반 검색
+
     hits = _dsm_db.similarity_search(symptom_text, k=top_k)
 
-    # 2) disorder 투표
-    diags = [
-        h.metadata.get("disorder")
-        for h in hits
-        if h.metadata.get("disorder")
-    ]
+    diags = [h.metadata.get("disorder") for h in hits if h.metadata.get("disorder")]
     counts = Counter(diags)
     top_diags = [d for d, _ in counts.most_common(diag_top_n)]
 
@@ -54,13 +51,9 @@ def retrieve_candidates(symptom_text: str, top_k: int = 12, diag_top_n: int = 3)
         "input_symptom": symptom_text,
         "diagnosis_candidates": top_diags,
         "by_diagnosis": {},
-        "raw_hits": [
-            {"text": h.page_content, "metadata": h.metadata}
-            for h in hits
-        ],
+        "raw_hits": [{"text": h.page_content, "metadata": h.metadata} for h in hits],
     }
 
-    # 3) 각 진단 후보에 대해 기준 문단 다시 가져오기
     for diag in top_diags:
         raw = _dsm_db.similarity_search(
             "diagnostic criteria",
@@ -68,56 +61,58 @@ def retrieve_candidates(symptom_text: str, top_k: int = 12, diag_top_n: int = 3)
             filter={"disorder": diag},
         )
 
-        # criteria 섹션만
-        criteria_docs = [
-            r for r in raw
-            if r.metadata.get("section") == "criteria"
-        ]
+        criteria_docs = [r for r in raw if r.metadata.get("section") == "criteria"]
 
         if criteria_docs:
-            # 가장 긴 문단 1개만
-            longest = max(
-                criteria_docs,
-                key=lambda d: len(d.page_content or "")
-            )
-            result["by_diagnosis"][diag] = [
-                {
-                    "text": longest.page_content,
-                    "metadata": longest.metadata,
-                }
-            ]
+            longest = max(criteria_docs, key=lambda d: len(d.page_content or ""))
+            result["by_diagnosis"][diag] = [{
+                "text": longest.page_content,
+                "metadata": longest.metadata,
+            }]
         else:
             result["by_diagnosis"][diag] = []
 
     return result
 
 
-def _metadata_matches_disorder(meta_disorder: Optional[str], diagnosis: str) -> bool:
-    """
-    treatment 컬렉션 메타데이터는 전부 문자열이라고 가정.
-    두 개 병명이 "A / B"로 묶여있을 수 있으니 부분 포함으로만 판정.
-    """
-    if not meta_disorder or not diagnosis:
+
+# -----------------------------
+# 내부 매칭 함수
+# -----------------------------
+def _metadata_matches_disorder(meta_disorder: Optional[str], category: str) -> bool:
+    if not meta_disorder or not category:
         return False
-    return diagnosis.lower() in meta_disorder.lower()
+    return category.lower() in meta_disorder.lower()
 
 
+
+# -----------------------------
+# Treatment Retrieval (FIXED)
+# -----------------------------
 def retrieve_solution(diagnosis: str, symptom_text: Optional[str] = None) -> Dict[str, Any]:
-    """
-    확정된 진단명 + (선택) 증상 설명을 넣으면
-    treatment 컬렉션에서 관련 치료 문단을 찾아서 주는 함수.
-    """
-    # 쿼리 생성
-    if symptom_text:
-        query = f"{diagnosis} {symptom_text} treatment"
-    else:
-        query = f"{diagnosis} treatment"
 
-    # 치료 컬렉션에서 우선 여러 개 가져온다
+    # 🔥 1) DSM 병명 → 치료 카테고리 변환
+    treatment_category = classify_disorder(diagnosis)
+
+    if treatment_category is None:
+        return {
+            "diagnosis": diagnosis,
+            "treatment_category": None,
+            "solutions": [],
+            "message": "해당 진단의 치료 문서가 없습니다."
+        }
+
+    # 🔥 2) Query 생성
+    if symptom_text:
+        query = f"{treatment_category} {symptom_text} treatment"
+    else:
+        query = f"{treatment_category} treatment"
+
+    # 🔥 3) Treatment DB에서 검색
     hits = _treatment_db.similarity_search(query, k=15)
 
-    matched: List[Dict[str, Any]] = []
-    others: List[Dict[str, Any]] = []
+    matched = []
+    others = []
 
     for h in hits:
         meta_dis = h.metadata.get("disorder")
@@ -125,16 +120,18 @@ def retrieve_solution(diagnosis: str, symptom_text: Optional[str] = None) -> Dic
             "text": h.page_content,
             "metadata": h.metadata,
         }
-        if _metadata_matches_disorder(meta_dis, diagnosis):
+
+        # 🔥 4) metadata["disorder"]가 treatment_category와 맞는지 확인
+        if _metadata_matches_disorder(meta_dis, treatment_category):
             matched.append(item)
         else:
             others.append(item)
 
-    # 정확히(또는 부분 포함으로) 매칭된 것들이 먼저 오도록
     ordered = matched + others
 
     return {
         "diagnosis": diagnosis,
+        "treatment_category": treatment_category,
         "query": query,
-        "solutions": ordered[:5],  # 너무 많으면 앞에서 5개만
+        "solutions": ordered[:5],
     }

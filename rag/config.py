@@ -13,12 +13,16 @@ DSM_COLLECTION_NAME = "dsm5tr"
 # treatment
 TREATMENT_DOCS_DIR = "./documents"
 TREATMENT_PDF_FILES = [
-    "ocd.pdf",
     "depression.pdf",
+    "psychosisandschizophrenia.pdf",
     "anxietyandpanic.pdf",
     "bipolar.pdf",
-    "ptsd.pdf",
+    "ocd.pdf",
+    "Dissociative.pdf",
+    "personality.pdf",
     "adhd.pdf",
+    "addiction.pdf",
+    "ptsd.pdf",
 ]
 TREATMENT_COLLECTION_NAME = "treatment"
 

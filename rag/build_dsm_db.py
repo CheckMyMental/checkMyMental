@@ -20,6 +20,20 @@ CRITERIA_PATTERN = re.compile(r"^[A-Z]\.\s")
 SUBCRITERIA_PATTERN = re.compile(r"^\d+\.\s")
 
 
+def strip_leading_icd(text: str) -> str:
+    """
+    줄 맨 앞에 ICD 코드(F00, F00.0 등)가 붙어 있으면 그 토큰만 제거.
+    예: "F00.0 Major Neurocognitive Disorder" -> "Major Neurocognitive Disorder"
+    """
+    t = text.strip()
+    if not t:
+        return t
+    parts = t.split()
+    if parts and ICD_PATTERN.match(parts[0]):
+        return " ".join(parts[1:]).strip()
+    return t
+
+
 def looks_like_disorder_title(text: str) -> bool:
     """
     병명 타이틀의 형태적 특징을 대강 필터링.
@@ -97,11 +111,15 @@ def normalize_title(text: str) -> str:
     """
     DSM 병명 비교용 간단 정규화:
     - 양쪽 공백 제거
+    - 맨 앞 ICD 코드 제거: F00, F00.0 등
     - 괄호 안 내용 삭제: (Intellectual Disability), (type 1) 등
     - 여러 공백 -> 한 칸
     - 소문자화
     """
     t = text.strip()
+    # 맨 앞 ICD 코드 제거
+    t = strip_leading_icd(t)
+    # 괄호 안 내용 제거
     t = re.sub(r"\s*\([^)]*\)", "", t)
     t = re.sub(r"\s+", " ", t)
     return t.lower()
@@ -288,7 +306,8 @@ def main():
                     if j > idx + 1:
                         skip_until_idx = j - 1  # 합쳐진 줄들은 이후 루프에서 건너뛴다.
 
-                    title_text = combined
+                    # 여기서 ICD 코드 제거
+                    title_text = strip_leading_icd(combined)
 
                     # 이전 설명 flush (현재 확정된 current_disorder 기준)
                     if current_disorder and description_buffer:

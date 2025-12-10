@@ -35,8 +35,9 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
             ]
         }
 
-    # 2. 질환별 심각도 Context 동적 로드 시도
+    # 2. 질환별 심각도 Context 동적 로드 시도 + diseases JSON 내 심각도 척도(severity_scale) 존재 여부 확인
     disease_context = ""
+    has_severity_scale = False
     try:
         disease_key = target_diagnosis.split()[0].lower()  # 첫 단어 사용
 
@@ -59,15 +60,49 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
         loaded_context = load_context_from_file(f"diseases/{filename}")
         if loaded_context:
             disease_context = loaded_context
+            # diseases JSON 안에 severity_scale 정보가 실제로 존재하는지 확인
+            try:
+                parsed = json.loads(loaded_context)
+                if isinstance(parsed, dict):
+                    scale = parsed.get("severity_scale")
+                    questions = None
+                    if isinstance(scale, dict):
+                        questions = scale.get("questions")
+                    if isinstance(questions, list) and len(questions) > 0:
+                        has_severity_scale = True
+            except Exception as parse_err:
+                print(f"심각도 JSON 파싱 오류 ({filename}): {parse_err}")
         else:
-            disease_context = (
-                "(해당 질환의 특화된 심각도 척도 파일이 없어, "
-                "일반적인 증상 강도와 빈도를 기준으로 평가합니다.)"
-            )
+            # diseases에 해당 질환 파일이 없거나 비어 있는 경우
+            has_severity_scale = False
 
     except Exception as e:
         print(f"심각도 컨텍스트 로드 오류: {e}")
         disease_context = "(심각도 컨텍스트 로드 실패)"
+        has_severity_scale = False
+
+    # diseases JSON에 severity_scale 정보가 없으면 심각도 단계 자체를 건너뛰고 다음 단계로 이동
+    if not has_severity_scale:
+        skip_msg = (
+            f"선택된 질환(`{target_diagnosis}`)에 대해 등록된 심각도 척도 정보가 없어, "
+            "4단계(심각도 평가)는 건너뛰고 바로 다음 단계로 진행할게요."
+        )
+        result_string = (
+            f"{target_diagnosis}에 대해 정의된 심각도 척도(severity_scale)가 없어 "
+            "심각도 평가는 생략되었습니다."
+        )
+        print(
+            f"[Severity Debug] severity_scale 없음 → 심각도 단계 스킵: "
+            f"disease_key={disease_key}, filename={filename}"
+        )
+        return {
+            "messages": [AIMessage(content=skip_msg)],
+            # 심각도 단계 완료로 간주되도록 결과 문자열만 남기고 질문 상태는 초기화
+            "severity_result_string": result_string,
+            "severity_questions": [],
+            "severity_current_index": 0,
+            "severity_answers": [],
+        }
 
     # 3. 프롬프트 / 공통 Context 로드
     prompt_path = Path("prompts/stage4_severity.md")
@@ -171,12 +206,54 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
         questions: List[Dict[str, Any]] = []
         if "Questions JSON:" in internal_data:
             try:
-                q_str = internal_data.split("Questions JSON:", 1)[1].strip()
-                questions_json = json.loads(q_str)
-                if isinstance(questions_json, dict) and isinstance(
-                    questions_json.get("questions"), list
-                ):
-                    questions = questions_json["questions"]
+                # INTERNAL_DATA 안에서 "Questions JSON:" 뒤에 나오는
+                # 가장 바깥 { ... } 블록을 중괄호 깊이 계산으로 안전하게 추출
+                start_pos = internal_data.index("Questions JSON:") + len(
+                    "Questions JSON:"
+                )
+                substring = internal_data[start_pos:]
+
+                # 코드블록이 있다면 먼저 건너뛰기 (```로 시작하는 경우)
+                code_fence_index = substring.find("```")
+                if code_fence_index != -1 and code_fence_index < substring.find("{"):
+                    substring = substring[code_fence_index + 3 :]
+
+                brace_start = substring.find("{")
+                if brace_start == -1:
+                    print(
+                        "[Severity Debug] Questions JSON 뒤에서 여는 중괄호를 찾지 못했습니다."
+                    )
+                else:
+                    depth = 0
+                    end_idx: Optional[int] = None
+                    for i, ch in enumerate(substring[brace_start:]):
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                end_idx = brace_start + i
+                                break
+                    if end_idx is None:
+                        print(
+                            "[Severity Debug] Questions JSON 중괄호 블록이 닫히지 않았습니다."
+                        )
+                    else:
+                        q_str = substring[brace_start : end_idx + 1].strip()
+                        # 혹시 뒤에 ```가 붙어 있다면 제거
+                        if q_str.endswith("```"):
+                            q_str = q_str.rsplit("```", 1)[0].strip()
+
+                        questions_json = json.loads(q_str)
+                        if isinstance(questions_json, dict) and isinstance(
+                            questions_json.get("questions"), list
+                        ):
+                            questions = questions_json["questions"]
+                        else:
+                            print(
+                                "[Severity Debug] Questions JSON 구조가 예상과 다릅니다: "
+                                f"type={type(questions_json)}"
+                            )
             except Exception as e:
                 print(f"Severity Questions JSON 파싱 오류: {e}")
 

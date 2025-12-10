@@ -15,6 +15,6 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 
 def get_embeddings():
     return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_name="sentence-transformers/embeddinggemma-300m-medical",
         model_kwargs={"device": "cpu"}   # gpu 쓰면 "cuda"
     )

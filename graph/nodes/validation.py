@@ -137,12 +137,55 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
         questions: List[Dict[str, Any]] = []
         if "Questions JSON:" in internal_data:
             try:
-                q_str = internal_data.split("Questions JSON:", 1)[1].strip()
-                questions_json = json.loads(q_str)
-                if isinstance(questions_json, dict) and isinstance(
-                    questions_json.get("questions"), list
-                ):
-                    questions = questions_json["questions"]
+                # INTERNAL_DATA 안에서 "Questions JSON:" 뒤에 나오는
+                # 가장 바깥 { ... } 블록을 중괄호 깊이 계산으로 안전하게 추출
+                start_pos = internal_data.index("Questions JSON:") + len(
+                    "Questions JSON:"
+                )
+                substring = internal_data[start_pos:]
+
+                # 코드블록이 있다면 먼저 건너뛰기 (```로 시작하는 경우)
+                code_fence_index = substring.find("```")
+                if code_fence_index != -1 and code_fence_index < substring.find("{"):
+                    # ``` 이후부터 다시 탐색
+                    substring = substring[code_fence_index + 3 :]
+
+                brace_start = substring.find("{")
+                if brace_start == -1:
+                    print(
+                        "[Validation Debug] Questions JSON 뒤에서 여는 중괄호를 찾지 못했습니다."
+                    )
+                else:
+                    depth = 0
+                    end_idx: Optional[int] = None
+                    for i, ch in enumerate(substring[brace_start:]):
+                        if ch == "{":
+                            depth += 1
+                        elif ch == "}":
+                            depth -= 1
+                            if depth == 0:
+                                end_idx = brace_start + i
+                                break
+                    if end_idx is None:
+                        print(
+                            "[Validation Debug] Questions JSON 중괄호 블록이 닫히지 않았습니다."
+                        )
+                    else:
+                        q_str = substring[brace_start : end_idx + 1].strip()
+                        # 혹시 뒤에 ```가 붙어 있다면 제거
+                        if q_str.endswith("```"):
+                            q_str = q_str.rsplit("```", 1)[0].strip()
+
+                        questions_json = json.loads(q_str)
+                        if isinstance(questions_json, dict) and isinstance(
+                            questions_json.get("questions"), list
+                        ):
+                            questions = questions_json["questions"]
+                        else:
+                            print(
+                                "[Validation Debug] Questions JSON 구조가 예상과 다릅니다: "
+                                f"type={type(questions_json)}"
+                            )
             except Exception as e:
                 print(f"Validation Questions JSON 파싱 오류: {e}")
 

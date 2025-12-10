@@ -218,64 +218,78 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
     # 5-2. 질문 리스트는 이미 있고, 사용자 답변(1~5)을 받아 다음 질문으로 진행
     total_q = len(severity_questions)
 
-    # 사용자 입력에서 1~5 사이 숫자 추출
-    answer_value: Optional[int] = None
-    if user_input:
-        match = re.search(r"[1-5]", user_input)
-        if match:
-            try:
-                answer_value = int(match.group(0))
-            except ValueError:
-                answer_value = None
-
-    if answer_value is None:
-        return {
-            "messages": [
-                AIMessage(
-                    content=(
-                        "답변을 이해하지 못했어요. 1, 2, 3, 4, 5 중 하나의 숫자로 "
-                        "현재 상태에 가장 가까운 정도를 입력해 주세요."
-                    )
-                )
-            ]
-        }
-
-    # 현재 질문에 대한 답변 저장
-    if len(answers) <= current_index:
-        answers.append(answer_value)
-    else:
-        answers[current_index] = answer_value
-
-    current_index += 1
-
-    print(
-        f"[Severity Debug] 응답 수신: answer={answer_value}, "
-        f"next_index={current_index}/{total_q}"
-    )
-
-    # 아직 남은 질문이 있다면 → 다음 질문 출력 (LLM 재호출 없음)
-    if current_index < total_q:
-        next_q = severity_questions[current_index]
-        next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
+    # 5-2-1. 개발자용 치트키: "개발자 상" / "개발자 하"
+    key = user_input.strip().replace(" ", "") if user_input else ""
+    if total_q > 0 and key in ("개발자상", "개발자하"):
+        if key == "개발자상":
+            answers = [5] * total_q
+        else:
+            answers = [1] * total_q
+        current_index = total_q
         print(
-            f"[Severity Debug] 다음 질문 진행: index={current_index}, "
-            f"text_preview={next_text[:30]}"
+            f"[Severity Debug] 개발자 치트키 사용: key={key}, "
+            f"all_answers={answers[0]} (총 {total_q}문항)"
         )
-        return {
-            "messages": [
-                AIMessage(
-                    content=build_question_message(
-                        next_text,
-                        is_first=False,
-                        question_index=current_index + 1,
-                        total_questions=total_q,
+    else:
+        # 5-2-2. 일반 흐름: 질문별로 1~5 답변을 하나씩 받기
+        # 사용자 입력에서 1~5 사이 숫자 추출
+        answer_value: Optional[int] = None
+        if user_input:
+            match = re.search(r"[1-5]", user_input)
+            if match:
+                try:
+                    answer_value = int(match.group(0))
+                except ValueError:
+                    answer_value = None
+
+        if answer_value is None:
+            return {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            "답변을 이해하지 못했어요. 1, 2, 3, 4, 5 중 하나의 숫자로 "
+                            "현재 상태에 가장 가까운 정도를 입력해 주세요."
+                        )
                     )
-                )
-            ],
-            "severity_questions": severity_questions,
-            "severity_current_index": current_index,
-            "severity_answers": answers,
-        }
+                ]
+            }
+
+        # 현재 질문에 대한 답변 저장
+        if len(answers) <= current_index:
+            answers.append(answer_value)
+        else:
+            answers[current_index] = answer_value
+
+        current_index += 1
+
+        print(
+            f"[Severity Debug] 응답 수신: answer={answer_value}, "
+            f"next_index={current_index}/{total_q}"
+        )
+
+        # 아직 남은 질문이 있다면 → 다음 질문 출력 (LLM 재호출 없음)
+        if current_index < total_q:
+            next_q = severity_questions[current_index]
+            next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
+            print(
+                f"[Severity Debug] 다음 질문 진행: index={current_index}, "
+                f"text_preview={next_text[:30]}"
+            )
+            return {
+                "messages": [
+                    AIMessage(
+                        content=build_question_message(
+                            next_text,
+                            is_first=False,
+                            question_index=current_index + 1,
+                            total_questions=total_q,
+                        )
+                    )
+                ],
+                "severity_questions": severity_questions,
+                "severity_current_index": current_index,
+                "severity_answers": answers,
+            }
 
     # 5-3. 모든 질문에 답변이 완료된 경우 → LLM으로 최종 심각도 평가 수행
     print(

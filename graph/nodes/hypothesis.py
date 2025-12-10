@@ -30,13 +30,18 @@ def hypothesis_node(state: CounselingState) -> Dict[str, Any]:
     # api.rag_service.retrieve_candidates 함수 사용
     # top_k=12 (검색 문서 수), diag_top_n=3 (최종 후보 질환 수)
     try:
+        print(f"[Hypothesis] intake_summary 길이: {len(intake_summary)}")
         rag_result = retrieve_candidates(
             symptom_text=intake_summary,
             top_k=12,
             diag_top_n=3
         )
+        print("[Hypothesis] retrieve_candidates 호출 성공")
+        print(f"[Hypothesis] rag_result keys: {list(rag_result.keys())}")
     except Exception as e:
-        print(f"RAG 검색 중 오류 발생: {e}")
+        import traceback
+        print(f"[Hypothesis] RAG 검색 중 오류 발생: {type(e).__name__}: {e}")
+        print(f"[Hypothesis] 상세 스택트레이스:\n{traceback.format_exc()}")
         return {
             "messages": [AIMessage(content="질환 데이터베이스 검색 중 문제가 발생했습니다.")],
             "hypothesis_criteria": []

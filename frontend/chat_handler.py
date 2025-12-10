@@ -1,5 +1,6 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
+import traceback
 
 from .graph_client import get_graph_client
 
@@ -52,7 +53,10 @@ def process_user_input(user_input: str):
         _sync_state_to_ui(final_state)
         
     except Exception as e:
-        print(f"[ChatHandler] Error executing graph: {e}")
+        # 전체 스택트레이스를 함께 출력하여 정확한 예외 발생 위치를 확인
+        print("[ChatHandler] Error executing graph:")
+        print(traceback.format_exc())
+        print(f"[ChatHandler] Error message: {e}")
         st.error("상담 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
 
 def _sync_state_to_ui(state: dict):

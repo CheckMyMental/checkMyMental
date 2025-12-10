@@ -82,7 +82,7 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
 ## Internal Data Format
 ---INTERNAL_DATA---
 Validated String: [질환명 or None]
-Validation JSON: {"질환A": 0.7, "질환B": 0.4, ...}
+Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
 """
 
     # LLM 호출

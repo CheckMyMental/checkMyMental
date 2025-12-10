@@ -40,47 +40,37 @@
 
 # Output Format
 
-## 질문 생성 결과
-```json
-{
-  "questions": [
-    {
-      "id": "q1",
-      "text": "질문 내용",
-      "target_diagnosis": "관련 질환명",
-      "related_criteria": "관련 진단 기준"
-    }
-  ]
-}
-```
+## 1. 화면에 보여줄 내용 (사용자용)
 
-## 확률 계산 결과
-```json
-{
-  "validation_result": {
-    "diagnoses": [
-      {
-        "name": "질환명1",
-        "probability": 65,
-        "criteria_met": ["충족된 기준들"],
-        "criteria_not_met": ["미충족 기준들"]
-      },
-      {
-        "name": "질환명2",
-        "probability": 45,
-        "criteria_met": [],
-        "criteria_not_met": []
-      },
-      {
-        "name": "질환명3",
-        "probability": 30,
-        "criteria_met": [],
-        "criteria_not_met": []
-      }
-    ],
-    "selected_diagnosis": "확률이 가장 높은 질환명 또는 null",
-    "branch": "branch1 또는 branch2",
-    "next_action": "다음 단계 설명"
-  }
-}
-```
+- 현재 Validation 단계임을 한두 문장으로 간단히 안내합니다.
+- 각 턴마다 **한 번에 하나의 질문만** 한국어 자연어로 보여줍니다.
+- 질문 바로 아래에 1~5번 Likert 척도 선택지를 번호 목록으로 제시합니다.
+- 이 사용자용 영역에는 **JSON, 코드 블록, INTERNAL_DATA, Validated String, Validation JSON** 같은 기술적인 표기는 절대 포함하지 않습니다.
+
+예시 (형식만 참고용):
+
+지금부터 몇 가지 질문을 드릴게요. 아래 보기 중에서 요즘 상태에 가장 가까운 번호를 골라 주세요.
+
+질문: 최근에 기분이 매우 좋거나, 지나치게 들뜨거나 활발한 느낌을 자주 경험하셨나요?
+
+1. 전혀 그렇지 않다  
+2. 거의 그렇지 않다  
+3. 가끔 그렇다  
+4. 자주 그렇다  
+5. 매우 자주/항상 그렇다  
+
+## 2. 내부 데이터 (INTERNAL_DATA, 시스템용)
+
+- 질문 리스트와 확률 계산 결과는 **system_instructions에서 지정한 `---INTERNAL_DATA---` 이하에만** JSON 형식으로 포함합니다.
+- 사용자는 이 INTERNAL_DATA 영역을 보지 않습니다.
+- INTERNAL_DATA 영역에서는 아래와 같은 정보를 제공합니다.
+  - `Questions JSON`: 생성된 질문 리스트 전체 (선택 사항)
+  - `Validated String`: 최종 확정 질환명(또는 `None`)
+  - `Validation JSON`: 각 질환별 확률 정보(JSON 객체)
+
+예시 (INTERNAL_DATA 영역의 개념적 구조):
+
+---INTERNAL_DATA---
+Questions JSON: { ...질환별 질문 리스트 JSON... }
+Validated String: Major Depressive Disorder
+Validation JSON: {"질환A": 0.7, "질환B": 0.4, ...}

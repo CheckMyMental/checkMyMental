@@ -35,12 +35,24 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     # 2. RAG 솔루션 검색
     # api.rag_service.retrieve_solution 사용
     try:
+        print(
+            "[Solution Debug] RAG 솔루션 검색 시작: "
+            f"diagnosis='{diagnosis}', intake_summary_len={len(intake_summary)}"
+        )
         rag_result = retrieve_solution(
             diagnosis=diagnosis,
-            symptom_text=intake_summary # 증상 텍스트도 함께 제공하여 검색 정확도 향상
+            symptom_text=intake_summary,  # 증상 텍스트도 함께 제공하여 검색 정확도 향상
+        )
+        if rag_result is None:
+            print("[Solution Debug] RAG 솔루션 검색 결과: None (fallback to empty list)")
+            rag_result = {"solutions": []}
+        else:
+            print(
+                "[Solution Debug] RAG 솔루션 검색 완료: "
+                f"solutions_count={len(rag_result.get('solutions', []))}"
         )
     except Exception as e:
-        print(f"Solution RAG 검색 오류: {e}")
+        print(f"[Solution Debug] RAG 솔루션 검색 오류: {e}")
         rag_result = {"solutions": []}
         
     # 검색된 솔루션 텍스트 포맷팅

@@ -1,6 +1,7 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 import traceback
+from typing import Optional, Dict, Any
 
 from .graph_client import get_graph_client
 
@@ -77,21 +78,50 @@ def _sync_state_to_ui(state: dict):
         return
         
     last_message = graph_messages[-1]
-    
+
     # 마지막 메시지가 AI 메시지인 경우에만 UI에 추가
     # (사용자 메시지는 이미 process_user_input 초반에 추가됨)
     if isinstance(last_message, AIMessage):
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": last_message.content
-        })
+        # Solution 단계의 최종 요약 메시지는 줄바꿈이 유지되도록 HTML로 감싸서 렌더링
+        is_solution_final = "final_summary_string" in state or "solution_content" in state
+        if is_solution_final:
+            content_html = (
+                "<div style='white-space: pre-line; line-height: 1.6; font-size: 0.95rem;'>"
+                f"{last_message.content}"
+                "</div>"
+            )
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": content_html,
+                    "is_html": True,
+                }
+            )
+        else:
+            st.session_state.messages.append(
+                {"role": "assistant", "content": last_message.content}
+            )
     
     # 2. 단계별 산출물 디버깅용 저장 (선택 사항)
     # 필요 시 st.session_state에 저장하여 사이드바 등에서 확인 가능
     if "intake_summary_report" in state:
         st.session_state.debug_intake_summary = state["intake_summary_report"]
-    if "diagnosis_result" in state: # state.py 필드명 확인 필요 (Validation 결과 등)
+    if "diagnosis_result" in state:  # state.py 필드명 확인 필요 (Validation 결과 등)
         st.session_state.debug_diagnosis = state.get("diagnosis_result")
+
+    # 3. 최종 요약 카드 (Solution 단계용)
+    # Solution 단계가 완료되면 final_summary_string/solution_content가 함께 존재하므로,
+    # 이 시점에 Validation/Severity 결과를 시각적으로 정리한 카드 UI를 추가로 렌더링한다.
+    if "final_summary_string" in state or "solution_content" in state:
+        html_card = _build_final_result_card(state)
+        if html_card:
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": html_card,
+                    "is_html": True,
+                }
+            )
 
 def get_current_stage_info():
     """
@@ -117,6 +147,100 @@ def get_current_stage_info():
         "solution": 5,
         "__end__": 6
     }
+
+
+def _build_final_result_card(state: Dict[str, Any]) -> Optional[str]:
+    """
+    최종 단계에서 의심 질환/확률 및 최종 평가 질환을
+    시각적으로 보기 좋게 정리한 HTML 카드 생성.
+    """
+    validation_probs = state.get("validation_probabilities") or {}
+    severity_dx = state.get("severity_diagnosis")
+    severity_text = state.get("severity_result_string") or ""
+
+    if not validation_probs and not severity_dx:
+        return None
+
+    # 질환별 확률 정렬
+    items = []
+    try:
+        items = sorted(
+            validation_probs.items(), key=lambda x: float(x[1]), reverse=True
+        )
+    except Exception:
+        items = list(validation_probs.items())
+
+    lines = []
+    lines.append(
+        """
+<div style="
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    padding: 16px 18px;
+    margin-top: 12px;
+    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+">
+"""
+    )
+    lines.append(
+        '<div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 4px;">최종 진단 요약</div>'
+    )
+    lines.append(
+        '<div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">'
+        "이번 상담을 바탕으로 분석된 질환 후보와 최종 평가 결과입니다."
+        "</div>"
+    )
+
+    # Validation 확률 영역
+    if items:
+        lines.append(
+            '<div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">질환별 검증 확률</div>'
+        )
+        for diag_name, prob in items:
+            try:
+                p = float(prob)
+            except Exception:
+                continue
+
+            bar_value = p if p <= 1.0 else p / 100.0
+            pct = p * 100 if p <= 1.0 else p
+            pct = max(0.0, min(pct, 100.0))
+            bar_value = max(0.0, min(bar_value, 1.0))
+
+            lines.append(
+                f'<div style="font-size: 0.85rem; margin-top: 4px;"><span style="font-weight:600;">{diag_name}</span> '
+                f'<span style="color:#555; font-size:0.8rem;">{pct:.0f}%</span></div>'
+            )
+            # Progress bar
+            bar_width = int(bar_value * 100)
+            lines.append(
+                f"""
+<div style="width: 100%; height: 6px; background: #f1f1f1; border-radius: 999px; overflow: hidden; margin-top: 2px;">
+  <div style="width: {bar_width}%; height: 100%; background: linear-gradient(90deg, #4f46e5, #22c55e);"></div>
+</div>
+"""
+            )
+
+    # 최종 평가 질환 영역
+    if severity_dx:
+        lines.append(
+            '<div style="margin-top: 12px; font-weight: 600; font-size: 0.9rem;">최종 평가 질환</div>'
+        )
+        lines.append(
+            f'<div style="font-size: 0.9rem; margin-top: 2px;"><span style="font-weight:700; color:#2c3e50;">{severity_dx}</span></div>'
+        )
+        if severity_text:
+            preview = (
+                severity_text[:180] + "..."
+                if len(severity_text) > 180
+                else severity_text
+            )
+            lines.append(
+                f'<div style="font-size: 0.8rem; color:#555; margin-top: 4px;">{preview}</div>'
+            )
+
+    lines.append("</div>")
+    return "\n".join(lines)
     
     stage_num = stage_map.get(current_node, 0)
     

@@ -301,7 +301,7 @@ Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
         context=eval_context,
         conversation_history=None,
     )
-
+    
     user_message = eval_response
     internal_data = ""
     new_state: Dict[str, Any] = {
@@ -309,19 +309,19 @@ Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
         "validation_current_index": current_index,
         "validation_answers": answers,
     }
-
+    
     if "---INTERNAL_DATA---" in eval_response:
         parts = eval_response.split("---INTERNAL_DATA---", 1)
         user_message = parts[0].strip()
         internal_data = parts[1].strip()
-
+        
     # Validation JSON 파싱 및 분기 결정
     if "Validation JSON:" in internal_data:
         try:
             json_str = internal_data.split("Validation JSON:", 1)[1].strip()
             probabilities = json.loads(json_str)
             new_state["validation_probabilities"] = probabilities
-
+            
             max_prob = 0.0
             for prob in probabilities.values():
                 try:
@@ -329,17 +329,17 @@ Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
                         max_prob = prob
                 except Exception:
                     continue
-
+            
             # 0.5 이하면 재탐색 (Re-Intake)
             if max_prob <= 0.5:
                 new_state["is_re_intake"] = True
                 new_state["severity_diagnosis"] = None
             else:
                 new_state["is_re_intake"] = False
-
+                
         except Exception as e:
             print(f"Validation JSON 파싱 오류: {e}")
-
+            
     if "Validated String:" in internal_data:
         # Validated String 뒤에 Validation JSON 등이 이어져 있을 수 있으므로,
         # 먼저 해당 구간만 잘라낸 뒤 공백/괄호 등을 정리해서 질환명만 추출한다.
@@ -352,7 +352,7 @@ Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
         diagnosis = diagnosis.strip("[]\"' ")
         if diagnosis.lower() != "none" and not new_state.get("is_re_intake", False):
             new_state["severity_diagnosis"] = diagnosis
-
+        
     return {
         "messages": [AIMessage(content=user_message)],
         **new_state,

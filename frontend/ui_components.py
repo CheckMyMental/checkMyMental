@@ -67,7 +67,83 @@ def render_sidebar():
             )
 
     st.sidebar.markdown("---")
-    
+
+    # --- 사용자용 진단 요약 카드 ---
+    if "thread_id" in st.session_state:
+        client = get_graph_client()
+        try:
+            snapshot = client.get_state_snapshot(st.session_state.thread_id)
+            state_values = snapshot.get("values", {})
+
+            validation_probs = state_values.get("validation_probabilities") or {}
+            severity_dx = state_values.get("severity_diagnosis")
+            severity_text = state_values.get("severity_result_string") or ""
+
+            if validation_probs or severity_dx:
+                st.sidebar.markdown(
+                    "<p style='font-weight: bold; font-size: 1.1em; margin-bottom: 4px;'>🧠 진단 요약</p>",
+                    unsafe_allow_html=True,
+                )
+
+                # 3단계: 질환별 확률 바
+                if validation_probs:
+                    st.sidebar.markdown(
+                        "<span style='font-size: 0.85em; color: #666;'>검증 단계에서 계산된 질환별 확률입니다.</span>",
+                        unsafe_allow_html=True,
+                    )
+                    try:
+                        items = sorted(
+                            validation_probs.items(),
+                            key=lambda x: float(x[1]),
+                            reverse=True,
+                        )
+                    except Exception:
+                        items = list(validation_probs.items())
+
+                    for diag_name, prob in items:
+                        try:
+                            p = float(prob)
+                        except Exception:
+                            continue
+
+                        # 0~1 또는 0~100 둘 다 대응
+                        bar_value = p if p <= 1.0 else p / 100.0
+                        pct = p * 100 if p <= 1.0 else p
+                        bar_value = max(0.0, min(bar_value, 1.0))
+
+                        st.sidebar.markdown(
+                            f"<span style='font-size: 0.9em;'><b>{diag_name}</b>: {pct:.0f}%</span>",
+                            unsafe_allow_html=True,
+                        )
+                        st.sidebar.progress(bar_value)
+
+                # 4단계: 최종 평가 질환 및 한 줄 요약
+                if severity_dx:
+                    st.sidebar.markdown(
+                        "<hr style='margin: 8px 0 4px 0; border: none; border-top: 1px solid #eee;' />",
+                        unsafe_allow_html=True,
+                    )
+                    st.sidebar.markdown(
+                        f"<span style='font-size: 0.9em;'><b>최종 평가 질환</b>: {severity_dx}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    if severity_text:
+                        preview = (
+                            severity_text[:120] + "..."
+                            if len(severity_text) > 120
+                            else severity_text
+                        )
+                        st.sidebar.markdown(
+                            f"<span style='font-size: 0.8em; color: #666;'>{preview}</span>",
+                            unsafe_allow_html=True,
+                        )
+
+                st.sidebar.markdown("---")
+
+        except Exception as e:
+            # 사용자용 요약은 실패해도 조용히 무시 (디버그 패널에서 상태 확인 가능)
+            print(f"[Sidebar Debug] 진단 요약 렌더링 오류: {e}")
+
     # --- 디버그/상태 패널 (개발자용) ---
     with st.sidebar.expander("🛠️ 디버그 패널 (상태 정보)", expanded=False):
         if "thread_id" in st.session_state:
@@ -130,18 +206,21 @@ def render_chat_messages(messages):
     # 채팅 메시지들을 화면에 표시
     for idx, message in enumerate(messages):
         # 가이드라인 메시지 (HTML 포함) 등 특수 메시지 처리
-        is_html = message.get("is_html", False) # TODO: Graph 전환 시 필드 확인 필요
+        is_html = message.get("is_html", False)  # TODO: Graph 전환 시 필드 확인 필요
 
         with st.chat_message(message["role"]):
-             # 새로 추가된 Assistant 메시지만 타이핑 효과 적용
-             # 이미 표시된 메시지는 바로 표시
-            if message["role"] == "assistant" and idx >= st.session_state.rendered_message_count:
+            # HTML 컨텐츠는 항상 그대로 렌더링 (타이핑 효과 적용 X)
+            if is_html:
+                st.markdown(message["content"], unsafe_allow_html=True)
+            # 새로 추가된 Assistant 메시지만 타이핑 효과 적용
+            # 이미 표시된 메시지는 바로 표시
+            elif (
+                message["role"] == "assistant"
+                and idx >= st.session_state.rendered_message_count
+            ):
                 _render_typing_effect(message["content"])
             else:
-                if is_html:
-                    st.markdown(message["content"], unsafe_allow_html=True)
-                else:
-                    st.markdown(message["content"])
+                st.markdown(message["content"])
     
     # 렌더링된 메시지 수 업데이트
     st.session_state.rendered_message_count = len(messages)

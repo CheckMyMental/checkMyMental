@@ -54,8 +54,10 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     context_data = {}
     
     # (1) 필수 정보 Context
+    context_files_used = []
     intake_context = load_context_from_file("stage_specific/context_stage1_intake.json")
     if intake_context:
+        context_files_used.append("stage_specific/context_stage1_intake.json")
         try:
             context_data["mandatory_fields"] = json.loads(intake_context)
         except json.JSONDecodeError:
@@ -64,6 +66,7 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     # (2) 도메인 정보 Context
     domains_context = load_context_from_file("stage_specific/context_stage1_domains.json")
     if domains_context:
+        context_files_used.append("stage_specific/context_stage1_domains.json")
         try:
             context_data["domains_info"] = json.loads(domains_context)
         except json.JSONDecodeError:
@@ -73,6 +76,7 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     if is_re_intake:
         re_intake_context = load_context_from_file("stage_specific/context_stage1_re_intake.json")
         if re_intake_context:
+            context_files_used.append("stage_specific/context_stage1_re_intake.json")
             try:
                 context_data["re_intake_guide"] = json.loads(re_intake_context)
             except json.JSONDecodeError:
@@ -88,7 +92,7 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
 - **현재 탐색 중인 도메인**: {current_domain if current_domain else "없음"}
 
 ## 동적 지시사항
-1. **도메인 감지**: 사용자의 발언에서 '13개 도메인' 중 하나와 관련된 강력한 징후가 발견되면, `---INTERNAL_DATA---` 섹션에 `DOMAIN_DETECTED: [도메인명]`을 출력하세요.
+1. **도메인 감지**: 사용자의 발언에서 '11개 도메인' 중 하나와 관련된 강력한 징후가 발견되면, `---INTERNAL_DATA---` 섹션에 `DOMAIN_DETECTED: [도메인명]`을 출력하세요.
 2. **도메인 질문 완료**: 도메인 심화 질문이 충분히 이루어졌다고 판단되면, `DOMAIN_COMPLETED: True`를 출력하여 일반 필수 정보 수집으로 복귀하세요.
 3. **필수 정보 수집 완료**: 5가지 필수 정보가 모두 충분히 수집되었다면, `Summary String:` 태그 뒤에 요약 리포트를 작성하세요.
 
@@ -106,6 +110,10 @@ Summary String:
 
     # Context 문자열 변환
     context_str = json.dumps(context_data, ensure_ascii=False, indent=2)
+
+    # 디버그: 사용한 프롬프트/컨텍스트 파일명만 로그 (콘솔)
+    print("[Intake Debug] prompt_path:", str(prompt_path))
+    print("[Intake Debug] context_files_used:", context_files_used)
     
     # 5. LLM 호출
     # ask_openai에 system_instructions와 context_str을 합쳐서 전달
@@ -120,6 +128,10 @@ Summary String:
         context=full_context,
         conversation_history=previous_history
     )
+    
+    # 디버그: 사용자/LLM 응답 로그 (콘솔)
+    print("[Intake Debug] user_input:", user_input)
+    print("[Intake Debug] llm_response:", response_text)
     
     # 6. 응답 파싱 및 State 업데이트
     user_message = response_text

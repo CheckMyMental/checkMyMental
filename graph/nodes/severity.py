@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 
 def severity_node(state: CounselingState) -> Dict[str, Any]:
@@ -106,11 +106,11 @@ Severity JSON: {{"diagnosis": "{target_diagnosis}", "level": "...", "score": "..
 """
 
     # 6. LLM 호출
-    # ask_gemini 사용 (히스토리 포함)
+    # ask_openai 사용 (히스토리 포함)
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     previous_history = history[:-1] if history else []
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input if user_input else f"{target_diagnosis}에 대한 심각도 평가를 시작합니다.",
         context=system_instructions, # context 인자에 시스템 프롬프트 전체를 넘김
         conversation_history=previous_history

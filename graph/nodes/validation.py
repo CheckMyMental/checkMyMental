@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 
 def validation_node(state: CounselingState) -> Dict[str, Any]:
@@ -88,12 +88,12 @@ Validation JSON: {"질환A": 0.7, "질환B": 0.4, ...}
     # LLM 호출
     full_context = f"{system_instructions}\n\n## Context Data\n{validation_context}"
     
-    # 히스토리 처리 (ask_gemini 사용)
+    # 히스토리 처리 (ask_openai 사용)
     # 이전 대화 맥락이 있어야 질문 순서를 기억함
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     previous_history = history[:-1] if history else [] # 현재 user_input 제외
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input if user_input else "Validation 단계를 시작합니다. 질문을 생성해주세요.",
         context=full_context,
         conversation_history=previous_history

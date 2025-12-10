@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 from api.rag_service import retrieve_solution
 
@@ -96,12 +96,12 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     # 5. LLM 호출
     # Solution 단계는 대화형이 아니라 일방적인 리포트 생성이므로
     # 히스토리를 참고하되, 사용자 입력은 별도로 필요하지 않음.
-    # ask_gemini 호출 시 user_input을 빈 문자열이나 지시어로 대체 가능.
+    # ask_openai 호출 시 user_input을 빈 문자열이나 지시어로 대체 가능.
     
     messages = state['messages']
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input="최종 솔루션 리포트를 작성해주세요.",
         context=system_instructions,
         conversation_history=history

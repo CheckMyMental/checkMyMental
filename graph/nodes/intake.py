@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 
 def intake_node(state: CounselingState) -> Dict[str, Any]:
@@ -28,7 +28,7 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
             # 시스템이나 AI 메시지가 마지막인 경우 (드물지만 방어 코드)
             user_input = "계속 진행해주세요."
             
-    # Gemini API용 히스토리 변환
+    # OpenAI API용 히스토리 변환
     history = []
     for msg in messages:
         role = "user" if isinstance(msg, HumanMessage) else "model"
@@ -108,14 +108,14 @@ Summary String:
     context_str = json.dumps(context_data, ensure_ascii=False, indent=2)
     
     # 5. LLM 호출
-    # ask_gemini에 system_instructions와 context_str을 합쳐서 전달
+    # ask_openai에 system_instructions와 context_str을 합쳐서 전달
     full_context = f"{system_instructions}\n\n## 참고할 Context Data\n{context_str}"
     
-    # 히스토리에서 마지막 사용자 메시지 제거 (ask_gemini 내부 로직과의 중복 방지 및 명확성 위해)
-    # ask_gemini는 user_input을 prompt에 포함시키므로 history에는 이전 대화만 남기는 게 좋음
+    # 히스토리에서 마지막 사용자 메시지 제거 (ask_openai 내부 로직과의 중복 방지 및 명확성 위해)
+    # ask_openai는 user_input을 prompt에 포함시키므로 history에는 이전 대화만 남기는 게 좋음
     previous_history = history[:-1] if history else []
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input,
         context=full_context,
         conversation_history=previous_history

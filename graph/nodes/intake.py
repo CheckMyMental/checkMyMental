@@ -19,14 +19,40 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     messages = state['messages']
     if not messages:
         # 초기 진입 시 (메시지가 없을 경우)
-        user_input = "상담을 시작합니다." #내부 트리거, 사용자가 입력하는건 아님.
+        user_input = "상담을 시작합니다."  # 내부 트리거, 사용자가 입력하는건 아님.
     else:
-        last_message = messages[-1] #마지막 사용자 메세지 추출
+        last_message = messages[-1]  # 마지막 사용자 메세지 추출
         if isinstance(last_message, HumanMessage):
             user_input = last_message.content
         else:
             # 시스템이나 AI 메시지가 마지막인 경우 (드물지만 방어 코드)
             user_input = "계속 진행해주세요."
+
+    # 1-1. 개발자용 치트키 처리 (요약 강제 주입)
+    # 사용자가 "우울증패스"라고 입력하면, Intake 과정을 생략하고
+    # 미리 정의된 Summary String을 바로 state에 주입하여 다음 단계로 넘어갑니다.
+    if isinstance(messages[-1], HumanMessage) and messages[-1].content.strip() == "우울증패스":
+        hardcoded_summary = (
+            "주요_증상: 시험에 대한 불안감. "
+            "수면: 자주 깨는 문제. "
+            "식욕_체중: 식욕 감소로 체중 감소. "
+            "활력_에너지: 에너지 부족과 피로감. "
+            "신체증상: 소화 문제."
+        )
+
+        dev_msg = (
+            "개발자 모드: 입력하신 치트키에 따라, 다음과 같은 고정 요약으로 "
+            "가설 설정 단계로 바로 진행합니다.\n\n"
+            f"{hardcoded_summary}"
+        )
+
+        return {
+            "messages": [AIMessage(content=dev_msg)],
+            "intake_summary_report": hardcoded_summary,
+            "domain_questions_active": False,
+            "current_domain": None,
+            "is_re_intake": False,
+        }
             
     # OpenAI API용 히스토리 변환
     history = []

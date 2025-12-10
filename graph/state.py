@@ -43,6 +43,10 @@ class CounselingState(TypedDict):
     # Validation Stage (3단계: 검증)
     validation_probabilities: Optional[Dict[str, float]]  # 각 의심 질환에 대한 검증 확률 (예: {"우울증": 0.8})
     is_re_intake: bool                                    # 확률이 낮아(50% 이하) 재탐색이 필요한지 여부
+    # 질문 생성/진행용 내부 상태
+    validation_questions: Optional[List[Dict[str, Any]]]  # 미리 생성된 질문 리스트
+    validation_current_index: int                         # 다음에 물어볼 질문 인덱스 (0-based)
+    validation_answers: Optional[List[int]]               # 각 질문에 대한 사용자의 1~5점 응답
     
     # Severity Stage (4단계: 심각도 평가)
     severity_diagnosis: Optional[str]      # 심각도 평가 대상으로 선정된 질환명 (Top 1)

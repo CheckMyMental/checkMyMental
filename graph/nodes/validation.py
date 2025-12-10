@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
 from frontend.openai_api import ask_openai
@@ -15,135 +15,295 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     - 2턴~: 사용자 응답 수집 및 진행
     - 마지막: 모든 답변 수집 후 확률 계산 및 결과 도출
     """
-    
     messages = state['messages']
-    last_message = messages[-1] if messages else None
-    user_input = last_message.content if isinstance(last_message, HumanMessage) else ""
+
+    # 최신 HumanMessage를 찾아 사용자 입력으로 사용
+    user_input = ""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            user_input = msg.content or ""
+            break
     
     # 상태 정보 가져오기
     hypothesis_criteria = state.get("hypothesis_criteria", [])
     if not hypothesis_criteria:
-         return {"messages": [AIMessage(content="오류: 가설 검증을 위한 기준 데이터가 없습니다. 상담을 초기화해주세요.")]}
+        return {
+            "messages": [
+                AIMessage(
+                    content="오류: 가설 검증을 위한 기준 데이터가 없습니다. 상담을 초기화해주세요."
+                )
+            ]
+        }
 
-    # 질문 리스트가 없으면 새로 생성해야 함 (첫 진입)
-    # LangGraph State에는 질문 리스트를 저장할 명시적 필드가 없으므로, 
-    # messages history나 임시 저장소를 활용해야 하지만,
-    # 여기서는 '질문 생성 모드'와 '답변 처리 모드'를 user_input과 내부 데이터로 구분합니다.
-    
-    # 다만, 복잡한 상태(현재 몇 번째 질문인지 등)를 관리하려면
-    # State에 `validation_state` 같은 Dict 필드를 추가하는 것이 좋으나,
-    # 현재 정의된 State 내에서 처리하기 위해 메시지 히스토리의 'internal_data'를 활용하거나,
-    # 한 번에 모든 질문을 생성하고 순차적으로 묻는 방식을 사용합니다.
-    
-    # 여기서는 구현 편의와 안정성을 위해:
-    # 1. 첫 진입 시 모든 질문을 생성하여 JSON 형태로 반환받음.
-    # 2. 이 질문 리스트를 프롬프트에 포함하여 매 턴마다 진행 상황을 추적하게 함.
-    #    (State에 저장하지 않고 대화 맥락으로 유지)
-    
-    # 프롬프트 로드
-    prompt_path = Path("prompts/stage3_validation.md")
-    try:
-        if prompt_path.exists():
-            with open(prompt_path, "r", encoding="utf-8") as f:
-                base_prompt = f.read()
-        else:
-            base_prompt = "기본 프롬프트 로드 실패"
-    except Exception as e:
-        base_prompt = f"프롬프트 로드 오류: {e}"
+    # Validation 전용 상태
+    validation_questions: List[Dict[str, Any]] = state.get("validation_questions") or []
+    current_index: int = state.get("validation_current_index", 0)
+    answers: List[int] = state.get("validation_answers") or []
 
-    # Context 로드
-    validation_context = load_context_from_file("stage_specific/context_stage3_validation.json")
-    
-    # 시스템 지시사항 구성
-    # 상황에 따라 프롬프트를 다르게 구성 (질문 생성 vs 결과 분석)
-    
-    # 이미 질문이 진행 중인지 확인 (메시지 히스토리 분석)
-    # 간단히: 이전 AI 메시지에 "questions_generated": true 표식이 있는지 등으로 판단 가능.
-    # 하지만 LLM에게 현재 대화 맥락을 주고 판단하게 하는 것이 가장 유연함.
-    
-    system_instructions = f"""
+    def build_question_message(
+        question_text: str,
+        *,
+        is_first: bool,
+        question_index: int,
+        total_questions: int,
+    ) -> str:
+        """
+        사용자에게 보여줄 질문 포맷.
+        - 첫 질문에서는 튜토리얼/안내 멘트를 충분히 제공
+        - 이후 질문에서는 심플하게 현재 번호만 표시
+        """
+        scale_text = (
+            "1. 전혀 그렇지 않다\n"
+            "2. 거의 그렇지 않다\n"
+            "3. 가끔 그렇다\n"
+            "4. 자주 그렇다\n"
+            "5. 매우 자주/항상 그렇다"
+        )
+
+        if is_first:
+            return (
+                "지금부터 3단계(가설 검증)를 진행할게요.\n"
+                "아래 질문들에 대해, **요즘 상태에 가장 가까운 번호(1~5)** 를 숫자로만 입력해 주세요.\n\n"
+                "[응답 방법 튜토리얼]\n"
+                "- 1: 거의 해당되지 않는다 / 드물게 그렇다\n"
+                "- 3: 가끔 그렇다 / 애매하지만 어느 정도 해당된다\n"
+                "- 5: 매우 자주 그렇다 / 거의 항상 그렇다\n"
+                "예를 들어, '조금 있는 것 같긴 한데 자주까지는 아닌 것 같다'면 3을, "
+                "'거의 매일 그렇다'면 5에 가깝게 선택해 주세요.\n\n"
+                f"[질문 {question_index}/{total_questions}]\n"
+                f"질문: {question_text}\n\n"
+                f"{scale_text}"
+            )
+
+        # 그 다음부터는 안내 멘트는 생략하고, 현재 질문 번호만 간단히 표시
+        return (
+            f"[질문 {question_index}/{total_questions}]\n"
+            f"질문: {question_text}\n\n"
+            f"{scale_text}"
+        )
+
+    # 1) 아직 질문 리스트가 없는 경우 → 한 번만 LLM으로 전체 질문 생성
+    if not validation_questions:
+        prompt_path = Path("prompts/stage3_validation.md")
+        try:
+            if prompt_path.exists():
+                with open(prompt_path, "r", encoding="utf-8") as f:
+                    base_prompt = f.read()
+            else:
+                base_prompt = "기본 프롬프트 로드 실패"
+        except Exception as e:
+            base_prompt = f"프롬프트 로드 오류: {e}"
+
+        validation_context = load_context_from_file(
+            "stage_specific/context_stage3_validation.json"
+        )
+
+        system_instructions = f"""
 {base_prompt}
 
 ## 현재 상담 진행 상황
 - **의심 질환 및 기준**:
 {json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)}
 
-## Validation 단계 처리 지침
-1. **(질문 생성)**: 아직 질문 리스트가 생성되지 않았다면, 위 의심 질환들을 검증하기 위한 질문 리스트(JSON)를 생성하고 첫 번째 질문을 사용자에게 던지세요.
-2. **(응답 수집)**: 사용자가 답변을 하면, 다음 질문을 이어서 하세요.
-3. **(결과 분석)**: 모든 질문에 대한 답변이 수집되었다면, 각 질환별 확률을 계산하고 결과를 도출하세요.
+## 출력 지침 (질문 생성 모드)
+- 화면에 노출되는 영역에는 질문 리스트 JSON을 포함하지 마세요.
+- 아래 INTERNAL_DATA 형식을 따라, 모든 질문 리스트를 JSON으로 제공하세요.
 
-## 출력 제어
-- **질문 진행 중**: 사용자에게는 한 번에 하나의 질문만 하세요. (5지선다 옵션 포함)
-- **완료 시**: 
-    - `Validated String:` 태그 뒤에 최종 확정된 질환명(Top 1)을 적으세요. (확률 50% 미만이면 "None" 표기)
-    - `Validation JSON:` 태그 뒤에 각 질환별 계산된 확률 정보를 JSON으로 출력하세요.
-    
-## Internal Data Format
+---INTERNAL_DATA---
+Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis": "...", "related_criteria": "..."}}]}}
+"""
+
+        full_context = (
+            f"{system_instructions}\n\n## Context Data\n{validation_context}"
+        )
+
+        response_text = ask_openai(
+            user_input="Validation 단계를 위한 전체 질문 리스트를 생성해주세요.",
+            context=full_context,
+            conversation_history=None,
+        )
+
+        internal_data = ""
+        if "---INTERNAL_DATA---" in response_text:
+            parts = response_text.split("---INTERNAL_DATA---", 1)
+            internal_data = parts[1].strip()
+
+        questions: List[Dict[str, Any]] = []
+        if "Questions JSON:" in internal_data:
+            try:
+                q_str = internal_data.split("Questions JSON:", 1)[1].strip()
+                questions_json = json.loads(q_str)
+                if isinstance(questions_json, dict) and isinstance(
+                    questions_json.get("questions"), list
+                ):
+                    questions = questions_json["questions"]
+            except Exception as e:
+                print(f"Validation Questions JSON 파싱 오류: {e}")
+
+        if not questions:
+            # 질문 생성 실패 시 에러 메시지 반환
+            return {
+                "messages": [
+                    AIMessage(
+                        content="오류: 검증 단계 질문을 생성하지 못했습니다. 잠시 후 다시 시도해주세요."
+                    )
+                ]
+            }
+
+        first_question = questions[0].get("text", "첫 번째 질문을 불러오지 못했습니다.")
+        total_q = len(questions)
+
+        return {
+            "messages": [
+                AIMessage(
+                    content=build_question_message(
+                        first_question,
+                        is_first=True,
+                        question_index=1,
+                        total_questions=total_q,
+                    )
+                )
+            ],
+            "validation_questions": questions,
+            "validation_current_index": 0,
+            "validation_answers": [],
+        }
+
+    # 2) 질문 리스트는 이미 있고, 사용자 답변(1~5)을 받아 다음 질문으로 진행
+    # 사용자 입력에서 1~5 사이 숫자 추출
+    answer_value: Optional[int] = None
+    if user_input:
+        match = re.search(r"[1-5]", user_input)
+        if match:
+            try:
+                answer_value = int(match.group(0))
+            except ValueError:
+                answer_value = None
+
+    if answer_value is None:
+        # 올바른 입력이 아니면 안내 메시지
+        return {
+            "messages": [
+                AIMessage(
+                    content=(
+                        "답변을 이해하지 못했어요. 1, 2, 3, 4, 5 중 하나의 숫자로 "
+                        "현재 상태에 가장 가까운 정도를 입력해 주세요."
+                    )
+                )
+            ]
+        }
+
+    # 현재 질문에 대한 답변 저장
+    if len(answers) <= current_index:
+        answers.append(answer_value)
+    else:
+        answers[current_index] = answer_value
+
+    current_index += 1
+
+    # 아직 남은 질문이 있다면 → 다음 질문을 동일 포맷으로 직접 출력 (LLM 재호출 없음)
+    total_q = len(validation_questions)
+    if current_index < total_q:
+        next_q = validation_questions[current_index]
+        next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
+        return {
+            "messages": [
+                AIMessage(
+                    content=build_question_message(
+                        next_text,
+                        is_first=False,
+                        question_index=current_index + 1,
+                        total_questions=total_q,
+                    )
+                )
+            ],
+            "validation_questions": validation_questions,
+            "validation_current_index": current_index,
+            "validation_answers": answers,
+        }
+
+    # 3) 모든 질문에 답변이 완료된 경우 → 별도 프롬프트로 LLM 호출하여 확률 계산/분기 처리
+    eval_prompt = """
+당신은 임상 심리사입니다. 아래 의심 질환 및 각 질환의 진단 기준,
+그리고 각 질문에 대한 사용자의 1~5점 응답을 기반으로
+각 질환의 부합 확률을 계산하고, 최종으로 가장 가능성이 높은 질환을 선택하세요.
+
+- 1은 거의 해당되지 않음, 5는 매우 자주/강하게 해당됨을 의미합니다.
+- 질문의 target_diagnosis, related_criteria를 참고하여, 각 질환의 점수를 계산하세요.
+- 점수는 0.0~1.0 범위의 확률로 환산해 주세요.
+
+출력 시, 사용자에게 보여줄 요약 설명은 자유롭게 작성하되,
+아래 INTERNAL_DATA 포맷을 반드시 포함해야 합니다.
+
 ---INTERNAL_DATA---
 Validated String: [질환명 or None]
 Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
 """
 
-    # LLM 호출
-    full_context = f"{system_instructions}\n\n## Context Data\n{validation_context}"
-    
-    # 히스토리 처리 (ask_openai 사용)
-    # 이전 대화 맥락이 있어야 질문 순서를 기억함
-    history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
-    previous_history = history[:-1] if history else [] # 현재 user_input 제외
-    
-    response_text = ask_openai(
-        user_input=user_input if user_input else "Validation 단계를 시작합니다. 질문을 생성해주세요.",
-        context=full_context,
-        conversation_history=previous_history
+    eval_context = f"""
+{eval_prompt}
+
+## 의심 질환 및 기준 (Hypothesis Criteria)
+{json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)}
+
+## 질문 리스트 (Validation Questions)
+{json.dumps(validation_questions, ensure_ascii=False, indent=2)}
+
+## 사용자 응답 (1~5 Likert, 질문 순서대로)
+{json.dumps(answers, ensure_ascii=False, indent=2)}
+"""
+
+    eval_response = ask_openai(
+        user_input="위 데이터를 바탕으로 Validation 결과를 계산하고 정리해 주세요.",
+        context=eval_context,
+        conversation_history=None,
     )
-    
-    # 응답 파싱
-    user_message = response_text
+
+    user_message = eval_response
     internal_data = ""
-    new_state = {}
-    
-    if "---INTERNAL_DATA---" in response_text:
-        parts = response_text.split("---INTERNAL_DATA---")
+    new_state: Dict[str, Any] = {
+        "validation_questions": validation_questions,
+        "validation_current_index": current_index,
+        "validation_answers": answers,
+    }
+
+    if "---INTERNAL_DATA---" in eval_response:
+        parts = eval_response.split("---INTERNAL_DATA---", 1)
         user_message = parts[0].strip()
         internal_data = parts[1].strip()
-        
-    # 결과 분석 (확률 및 재탐색 여부)
+
+    # Validation JSON 파싱 및 분기 결정
     if "Validation JSON:" in internal_data:
         try:
-            json_str = internal_data.split("Validation JSON:")[1].strip()
+            json_str = internal_data.split("Validation JSON:", 1)[1].strip()
             probabilities = json.loads(json_str)
             new_state["validation_probabilities"] = probabilities
-            
-            # 확률 체크 (모든 질환이 50% 이하인지)
-            # 확률은 0.0 ~ 1.0 범위로 가정 (또는 백분율)
-            # 여기서는 LLM이 어떻게 줄지 모르므로 0.5 또는 50 기준으로 유연하게 판단 필요하지만
-            # 보통 0.0~1.0 스케일을 권장.
-            
+
             max_prob = 0.0
             for prob in probabilities.values():
-                if prob > max_prob:
-                    max_prob = prob
-            
+                try:
+                    if prob > max_prob:
+                        max_prob = prob
+                except Exception:
+                    continue
+
             # 0.5 이하면 재탐색 (Re-Intake)
             if max_prob <= 0.5:
                 new_state["is_re_intake"] = True
-                new_state["severity_diagnosis"] = None # 진단 유보
+                new_state["severity_diagnosis"] = None
             else:
                 new_state["is_re_intake"] = False
-                
+
         except Exception as e:
             print(f"Validation JSON 파싱 오류: {e}")
-            
+
     if "Validated String:" in internal_data:
-        diagnosis = internal_data.split("Validated String:")[1].strip()
-        # "None"이 아니고 재탐색 모드가 아니면 진단명 설정
+        diagnosis = internal_data.split("Validated String:", 1)[1].strip()
         if diagnosis.lower() != "none" and not new_state.get("is_re_intake", False):
-             new_state["severity_diagnosis"] = diagnosis
-        
+            new_state["severity_diagnosis"] = diagnosis
+
     return {
         "messages": [AIMessage(content=user_message)],
-        **new_state
+        **new_state,
     }
 

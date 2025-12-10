@@ -24,7 +24,6 @@ def init_chat_history():
     
     if "thread_id" not in st.session_state:
         st.session_state.thread_id = st.session_state.graph_client.create_thread_id()
-        print(f"[ChatHandler] New session initialized with thread_id: {st.session_state.thread_id}")
 
 def process_user_input(user_input: str):
     """
@@ -46,18 +45,16 @@ def process_user_input(user_input: str):
     try:
         # Graph Invoke (Blocking)
         # 실제 구현에서는 stream_graph를 사용하여 토큰 스트리밍을 구현할 수 있음
-        print(f"[ChatHandler] 그래프 실행 시작 - user_input: {user_input[:50]}...")
         final_state = graph_client.invoke_graph(user_input, thread_id)
         
         # 디버깅: 상태 확인
         intake_summary = final_state.get("intake_summary_report")
         if intake_summary:
-            print(f"[ChatHandler] ✓ intake_summary_report 생성됨 (길이: {len(intake_summary)} 문자)")
+            pass
         
         # 다음 노드 확인
         snapshot = graph_client.get_state_snapshot(thread_id)
         next_nodes = snapshot.get("next", [])
-        print(f"[ChatHandler] 현재 그래프 상태 - 다음 노드: {next_nodes}")
         
         # 3. 결과 동기화 (State -> UI)
         _sync_state_to_ui(final_state)
@@ -65,9 +62,6 @@ def process_user_input(user_input: str):
     except Exception as e:
         import traceback
         error_msg = str(e)
-        print(f"[ChatHandler] Error executing graph: {error_msg}")
-        print(f"[ChatHandler] Error type: {type(e).__name__}")
-        print(f"[ChatHandler] Full traceback:")
         traceback.print_exc()
         st.error(f"상담 처리 중 오류가 발생했습니다: {error_msg}")
 

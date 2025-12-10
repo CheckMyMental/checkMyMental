@@ -58,28 +58,20 @@ def call_rag_hypothesis_api(request_data: Dict, api_url: str = "http://localhost
         RAG API 응답 데이터 (실패 시 None)
     """
     try:
-        print(f"[RAG Handler] Hypothesis API 호출 시작: {api_url}")
-        print(f"[RAG Handler] 요청 데이터: intake_report={len(request_data['intake_report'])}자, top_k={request_data['top_k']}, diag_top_n={request_data['diag_top_n']}")
         
         with httpx.Client(timeout=30.0) as client:
             response = client.post(api_url, json=request_data)
             response.raise_for_status()
             result = response.json()
             
-            print(f"[RAG Handler] Hypothesis API 호출 성공")
-            # print(f"[RAG Handler] 검색된 질환 후보: {result.get('diagnosis_candidates', [])}")
-            print(f"[RAG Handler] return 값 확인 : {result}")
             
             return result
             
     except httpx.RequestError as e:
-        print(f"[RAG Handler 오류] Hypothesis API 요청 실패: {e}")
         return None
     except httpx.HTTPStatusError as e:
-        print(f"[RAG Handler 오류] Hypothesis API 응답 오류: {e.response.status_code} - {e.response.text}")
         return None
     except Exception as e:
-        print(f"[RAG Handler 오류] 예상치 못한 오류: {e}")
         return None
 
 
@@ -97,10 +89,8 @@ def process_stage2_rag_hypothesis(internal_data: str, top_k: int = 12, diag_top_
     """
     # 1. Summary String 추출
     summary_string = parse_summary_string(internal_data)
-    print(f"[RAG Handler] Summary String 추출 완료: {len(summary_string)}자")
     
     if not summary_string:
-        print(f"[RAG Handler 오류] Summary String이 비어있습니다.")
         return None
     
     # 2. RAG Hypothesis API 요청 데이터 생성
@@ -132,29 +122,21 @@ def call_rag_solution_api(diagnosis: str, api_url: str = "http://localhost:8000/
             "diagnosis": diagnosis
         }
         
-        print(f"[RAG Handler] 솔루션 API 호출 시작: {api_url}")
-        print(f"[RAG Handler] 요청 데이터: diagnosis={diagnosis}")
         
         with httpx.Client(timeout=30.0) as client:
             response = client.post(api_url, json=request_data)
             response.raise_for_status()
             result = response.json()
             
-            print(f"[RAG Handler] 솔루션 API 호출 성공")
-            print(f"[RAG Handler] 응답: diagnosis={result.get('diagnosis')}, evidence 개수={len(result.get('evidence', []))}")
-            print(f"[RAG Handler] return 값 확인 : {result}")
 
 
             return result
             
     except httpx.RequestError as e:
-        print(f"[RAG Handler 오류] 솔루션 API 요청 실패: {e}")
         return None
     except httpx.HTTPStatusError as e:
-        print(f"[RAG Handler 오류] 솔루션 API 응답 오류: {e.response.status_code} - {e.response.text}")
         return None
     except Exception as e:
-        print(f"[RAG Handler 오류] 예상치 못한 오류: {e}")
         return None
 
 
@@ -169,7 +151,6 @@ def process_stage4_rag_solution(diagnosis: str) -> Optional[Dict]:
         RAG API 응답 데이터 (실패 시 None)
     """
     if not diagnosis or not diagnosis.strip():
-        print(f"[RAG Handler 오류] 질환명이 비어있습니다.")
         return None
     
     # RAG API 호출

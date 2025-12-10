@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.openai_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file, load_prompt_from_file
 from api.rag_service import retrieve_solution
 
@@ -13,9 +13,6 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     - RAG 검색을 통한 맞춤형 솔루션 도출
     - 최종 사용자 응답 생성
     """
-    print("=" * 60)
-    print("[Stage 5: Solution] 노드 실행 시작")
-    print("=" * 60)
     
     # 1. 필수 데이터 확인
     diagnosis = state.get("severity_diagnosis")
@@ -26,7 +23,6 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     severity_result = state.get("severity_result_string")
     if not severity_result:
         error_msg = "오류: 심각도 평가가 완료되지 않았습니다. 심각도 평가 단계를 먼저 진행해야 합니다."
-        print(f"[Solution Node] ✗ {error_msg}")
         return {"messages": [AIMessage(content=error_msg)]}
         
     intake_summary = state.get("intake_summary_report", "")
@@ -48,7 +44,6 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
             symptom_text=intake_summary # 증상 텍스트도 함께 제공하여 검색 정확도 향상
         )
     except Exception as e:
-        print(f"Solution RAG 검색 오류: {e}")
         rag_result = {"solutions": []}
         
     # 검색된 솔루션 텍스트 포맷팅
@@ -67,7 +62,6 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     base_prompt = load_prompt_from_file("stage5_solution.md")
     if not base_prompt:
         base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
-        print(f"[Solution Node] ⚠ 프롬프트 파일 로드 실패: stage5_solution.md")
         
     solution_context_guide = load_context_from_file("stage_specific/context_stage5_solution.json")
 
@@ -104,7 +98,7 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     messages = state['messages']
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input="최종 솔루션 리포트를 작성해주세요.",
         context=system_instructions,
         conversation_history=history

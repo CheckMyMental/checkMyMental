@@ -34,17 +34,13 @@ def load_context_from_file(filename: str) -> str:
     file_path = CONTEXT_DIR / filename
     
     if not file_path.exists():
-        print(f"[Context Handler] ⚠ 파일을 찾을 수 없습니다: {file_path}")
-        print(f"[Context Handler]    찾는 경로: {filename}")
         return ""
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            print(f"[Context Handler] ✓ 파일 로드 성공: {filename} (길이: {len(content)} 문자)")
             return content
     except Exception as e:
-        print(f"[Context Handler] ✗ Context 파일 읽기 오류 ({filename}): {e}")
         return ""
 
 
@@ -60,7 +56,6 @@ def save_context_to_file(filename: str, content: str) -> bool:
             f.write(content)
         return True
     except Exception as e:
-        print(f"Context 파일 저장 오류 ({filename}): {e}")
         return False
 
 #지정된 이름의 파일(.txt나 .md)에서 context를 읽어서 문자열로 반환
@@ -84,17 +79,13 @@ def load_prompt_from_file(filename: str) -> str:
     file_path = PROMPTS_DIR / filename
     
     if not file_path.exists():
-        print(f"[Prompt Handler] ⚠ 파일을 찾을 수 없습니다: {file_path}")
-        print(f"[Prompt Handler]    찾는 경로: {filename}")
         return ""
     
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            print(f"[Prompt Handler] ✓ 파일 로드 성공: {filename} (길이: {len(content)} 문자)")
             return content
     except Exception as e:
-        print(f"[Prompt Handler] ✗ Prompt 파일 읽기 오류 ({filename}): {e}")
         return ""
 
 

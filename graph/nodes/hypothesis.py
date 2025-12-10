@@ -11,9 +11,6 @@ def hypothesis_node(state: CounselingState) -> Dict[str, Any]:
     - RAG 검색을 통해 의심 질환 후보 및 진단 기준 도출
     - 다음 단계(Validation)를 위한 State 업데이트
     """
-    print("=" * 60)
-    print("[Stage 2: Hypothesis] 노드 실행 시작")
-    print("=" * 60)
     
     # 1. 입력 데이터 확인 (Intake Summary Report)
     intake_summary = state.get("intake_summary_report")
@@ -37,7 +34,6 @@ def hypothesis_node(state: CounselingState) -> Dict[str, Any]:
             diag_top_n=3
         )
     except Exception as e:
-        print(f"RAG 검색 중 오류 발생: {e}")
         return {
             "messages": [AIMessage(content="질환 데이터베이스 검색 중 문제가 발생했습니다.")],
             "hypothesis_criteria": []

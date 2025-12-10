@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.openai_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file, load_prompt_from_file
 
 def intake_node(state: CounselingState) -> Dict[str, Any]:
@@ -12,9 +12,6 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     - 도메인 심화 질문
     - Re-Intake 처리
     """
-    print("=" * 60)
-    print("[Stage 1: Intake] 노드 실행 시작")
-    print("=" * 60)
     
     # 1. 메시지 히스토리 준비
     messages = state['messages']
@@ -42,23 +39,20 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     existing_intake_summary = state.get('intake_summary_report', '')  # Re-Intake 모드에서 기존 Summary 보존
     
     # 3. 프롬프트 및 컨텍스트 로드 (매번 새로 로드)
-    print(f"[Intake Node] 프롬프트 및 컨텍스트 파일 로드 시작...")
     
     # Re-Intake 모드일 때는 re_intake 프롬프트 사용
     if is_re_intake:
         base_prompt = load_prompt_from_file("stage1_re_intake.md")
         if not base_prompt:
             base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
-            print(f"[Intake Node] ⚠ 프롬프트 파일 로드 실패: stage1_re_intake.md")
         else:
-            print(f"[Intake Node] ✓ Re-Intake 프롬프트 로드 완료: stage1_re_intake.md ({len(base_prompt)} 문자)")
+            pass
     else:
         base_prompt = load_prompt_from_file("stage1_intake.md")
         if not base_prompt:
             base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
-            print(f"[Intake Node] ⚠ 프롬프트 파일 로드 실패: stage1_intake.md")
         else:
-            print(f"[Intake Node] ✓ 프롬프트 로드 완료: stage1_intake.md ({len(base_prompt)} 문자)")
+            pass
 
     context_data = {}
     
@@ -67,22 +61,20 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     if intake_context:
         try:
             context_data["mandatory_fields"] = json.loads(intake_context)
-            print(f"[Intake Node] ✓ 필수 정보 컨텍스트 로드 완료 ({len(intake_context)} 문자)")
         except json.JSONDecodeError:
             context_data["mandatory_fields"] = intake_context
     else:
-        print(f"[Intake Node] ⚠ 필수 정보 컨텍스트 로드 실패")
+        pass
     
     # (2) 도메인 정보 Context (매번 새로 로드)
     domains_context = load_context_from_file("stage_specific/context_stage1_domains.json")
     if domains_context:
         try:
             context_data["domains_info"] = json.loads(domains_context)
-            print(f"[Intake Node] ✓ 도메인 정보 컨텍스트 로드 완료 ({len(domains_context)} 문자)")
         except json.JSONDecodeError:
             context_data["domains_info"] = domains_context
     else:
-        print(f"[Intake Node] ⚠ 도메인 정보 컨텍스트 로드 실패")
+        pass
     
     # (3) Re-Intake Context (Re-Intake 모드일 때만 로드)
     if is_re_intake:
@@ -90,11 +82,10 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
         if re_intake_context:
             try:
                 context_data["re_intake_guide"] = json.loads(re_intake_context)
-                print(f"[Intake Node] ✓ Re-Intake 컨텍스트 로드 완료 ({len(re_intake_context)} 문자)")
             except json.JSONDecodeError:
                 context_data["re_intake_guide"] = re_intake_context
         else:
-            print(f"[Intake Node] ⚠ Re-Intake 컨텍스트 로드 실패")
+            pass
 
     # 4. System Prompt 구성 (LLM 지시사항)
     # 필수 필드 수집 상태 확인을 위한 히스토리 분석
@@ -133,108 +124,36 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
 - **도메인 심화 질문 모드**: {"예" if domain_active else "아니오"}
 - **현재 탐색 중인 도메인**: {current_domain if current_domain else "없음"}
 
-## 필수 필드 수집 상태 확인 (매우 중요!)
-**반드시 다음 5가지 필수 필드가 모두 충분히 수집되었는지 확인하세요:**
-1. **주요_증상** (Chief Complaint): 사용자가 상담을 요청한 이유, 현재 기분, 증상의 구체적 내용 (증상의 종류, 강도, 시작 시기, 지속 기간, 악화/완화 요인, 일상생활에 미치는 영향 등 상세한 정보)
-   - **매우 중요**: 주요증상은 반드시 완전한 문장으로 기록해야 합니다!
-   - "우울", "불안" 같은 단어만 쓰지 마세요!
-   - "무엇 때문에 우울한지", "어떤 상황에서 불안한지" 등 원인과 맥락을 포함한 완전한 문장으로 기록하세요!
-   - 예시:
-     * ❌ 잘못된 예: "우울"
-     * ✅ 올바른 예: "최근 직장에서의 스트레스 때문에 우울한 기분이 지속되고 있습니다"
-     * ❌ 잘못된 예: "불안"
-     * ✅ 올바른 예: "시험 기간이 다가오면서 불안감이 심해져서 집중이 잘 안 됩니다"
-   - 주요증상은 사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있을 정도의 설명이면 충분합니다.
-   - 너무 짧은 답변(예: "안 좋아요", "우울해요")만 아니면, 사용자가 자연스럽게 말한 내용을 그대로 수집하면 됩니다.
-   - 불필요하게 반복 질문하지 말고, 사용자의 답변에 자연스럽게 공감하며 필요한 핵심 정보만 수집하세요.
-2. **수면** (Sleep): 수면 문제 유형 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
-   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
-   - 추가 질문 없이 한 번의 답변으로 충분합니다
-   - 허용된 유형: "불면증(insomnia)", "과다수면(hypersomnia)", "입면 곤란(difficulty falling asleep)", "수면 유지 곤란(difficulty staying asleep)", "이른 아침 각성(early morning awakening)", "문제 없음"
+## 필수 필드 수집 및 처리 가이드
+이 프롬프트 하단에 첨부된 **Context Data (mandatory_fields)** 를 기준으로 대화를 진행하세요.
 
-3. **식욕_체중** (Appetite & Weight): 식욕/체중 변화 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
-   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
-   - 추가 질문 없이 한 번의 답변으로 충분합니다
-   - 허용된 유형: "식욕 감소(decreased appetite)", "식욕 증가(increased appetite)", "현저한 체중 감소(significant weight loss)", "현저한 체중 증가(significant weight gain)", "문제 없음"
-
-4. **활력_에너지** (Energy & Vitality): 에너지 수준 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
-   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
-   - 추가 질문 없이 한 번의 답변으로 충분합니다
-   - 허용된 유형: "피로(fatigue)", "활력 상실(loss of energy)", "정신운동 지연(psychomotor retardation)", "정신운동 초조(psychomotor agitation)", "집중력 감소(diminished ability to concentrate)", "우유부단(indecisiveness)", "문제 없음"
-
-5. **신체증상** (Somatic Symptoms): 신체적 불편함 - 사용자의 답변을 `<context_stage1_intake.json>`의 `problem_types` 목록에서 바로 선택
-   - 한 번 질문하고 사용자가 답변하면, 정해진 목록 중 하나로 바로 분류하세요
-   - 추가 질문 없이 한 번의 답변으로 충분합니다
-   - 허용된 유형: "두통(headache)", "위장 증상(gastrointestinal symptoms)", "근육 긴장(muscle tension)", "심계항진(palpitations)", "호흡곤란(shortness of breath)", "흉부 불편감(chest discomfort)", "현기증(dizziness)", "이인증(depersonalization)", "비현실감(derealization)", "문제 없음"
-
-**중요 규칙:**
-- 위 5가지 필드 중 하나라도 충분히 수집되지 않았다면, `Summary String:`을 생성하지 마세요!
-- 모든 필드가 수집되었다고 확신할 수 있을 때만 `Summary String:`을 생성하세요!
-- 필드 수집이 부족하면 계속 해당 필드에 대한 질문을 하세요!
+1. **필수 필드 확인**: `mandatory_fields`에 정의된 5가지 항목(주요_증상, 수면, 식욕_체중, 활력_에너지, 신체증상)을 모두 수집해야 합니다.
+2. **답변 분류**: 사용자의 답변은 반드시 Context의 `problem_types` 목록에 있는 용어로 분류하여 기록하세요. (주요_증상 제외)
+3. **주요_증상 기록**: 주요_증상은 사용자의 구체적인 호소 내용을 문장 형태로 기록하세요.
 
 ## 동적 지시사항
-1. **도메인 감지**: 사용자의 발언에서 '13개 도메인' 중 하나와 관련된 강력한 징후가 발견되면, `---INTERNAL_DATA---` 섹션에 `DOMAIN_DETECTED: [도메인명]`을 출력하세요.
-2. **도메인 질문 완료**: 도메인 심화 질문이 충분히 이루어졌다고 판단되면, `DOMAIN_COMPLETED: True`를 출력하여 일반 필수 정보 수집으로 복귀하세요.
-3. **필수 정보 수집 완료 검증**: 
-   - 먼저 위 5가지 필수 필드가 모두 수집되었는지 확인하세요
-   - 각 필드에 대한 구체적인 정보가 있는지 확인하세요
-   - 모든 필드가 충분히 수집되었다고 확신할 때만 `Summary String:`을 생성하세요
-   - `Summary String:`에는 반드시 5가지 필수 필드에 대한 정보를 모두 포함해야 합니다
+1. **도메인 감지**: 대화 중 13개 도메인(우울, 불안 등)과 관련된 강력한 징후가 발견되면 `---INTERNAL_DATA---` 섹션에 `DOMAIN_DETECTED: [도메인명]`을 출력하세요.
+2. **도메인 질문 완료**: 도메인 심화 질문이 완료되면 `DOMAIN_COMPLETED: True`를 출력하여 필수 정보 수집으로 복귀하세요.
+3. **완료 조건**: 5가지 필수 정보가 모두 수집되었다고 판단될 때만 `Summary String:`을 생성하세요.
 
-## 출력 형식 (엄격 준수)
-먼저 사용자에게 보낼 공감적이고 자연스러운 응답을 작성하세요. 그 후, 시스템 처리를 위한 데이터는 반드시 `---INTERNAL_DATA---` 구분선 아래에 작성하세요.
+## 출력 형식 (Strict)
+먼저 사용자에게 보낼 공감적인 메시지를 작성하고, 그 뒤에 시스템 데이터를 작성하세요.
 
-[사용자에게 보낼 응답 메시지]
+[사용자 응답 메시지]
 
 ---INTERNAL_DATA---
-FIELD_COLLECTION_STATUS: [각 필드별 수집 상태를 명시적으로 표시]
-- 주요_증상: [수집됨/부족/미수집]
-- 수면: [수집됨/부족/미수집]
-- 식욕_체중: [수집됨/부족/미수집]
-- 활력_에너지: [수집됨/부족/미수집]
-- 신체증상: [수집됨/부족/미수집]
-DOMAIN_DETECTED: [도메인명] (선택사항)
-DOMAIN_COMPLETED: [True] (선택사항)
+FIELD_COLLECTION_STATUS:
+- 주요_증상: [수집됨/미수집]
+- 수면: [수집됨/미수집]
+- 식욕_체중: [수집됨/미수집]
+- 활력_에너지: [수집됨/미수집]
+- 신체증상: [수집됨/미수집]
+
+DOMAIN_DETECTED: [도메인명] (감지된 경우만)
+DOMAIN_COMPLETED: [True] (완료된 경우만)
+
 Summary String:
-[모든 5가지 필수 필드가 충분히 수집되었을 때만 작성하세요. 각 필드에 대한 구체적인 내용을 포함하세요.]
-
-**카테고리 기록 형식 (매우 중요! DSM-5 임베딩 성능을 위해 필수!)**:
-- 주요_증상: 자유 텍스트 (사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있는 정도)
-  - **매우 중요**: 주요증상은 반드시 완전한 문장으로 기록해야 합니다!
-  - "우울", "불안" 같은 단어만 쓰지 마세요!
-  - "무엇 때문에 우울한지", "어떤 상황에서 불안한지" 등 원인과 맥락을 포함한 완전한 문장으로 기록하세요!
-  - 예시:
-    * ❌ 잘못된 예: "우울"
-    * ✅ 올바른 예: "최근 직장에서의 스트레스 때문에 우울한 기분이 지속되고 있습니다"
-    * ❌ 잘못된 예: "불안"
-    * ✅ 올바른 예: "시험 기간이 다가오면서 불안감이 심해져서 집중이 잘 안 됩니다"
-
-**수면, 식욕_체중, 활력_에너지, 신체증상 필드 질문 규칙 (매우 중요!):**
-- 각 카테고리는 **한 번만 질문**하고, 사용자가 답변하면 바로 `<context_stage1_intake.json>`의 `problem_types` 목록에서 선택하세요!
-- 추가 질문하지 마세요! 사용자의 답변을 받으면 바로 분류하고 다음 필드로 넘어가세요!
-- 각 카테고리는 정해진 목록에서 선택만 하면 되므로, 꼬치꼬치 물어볼 필요가 전혀 없습니다!
-- 예: 
-  * 사용자가 "잠을 잘 못 잤어요"라고 하면 → "불면증(insomnia)" 또는 "입면 곤란"으로 바로 분류하고 추가 질문 금지!
-  * 사용자가 "밥을 잘 안 먹어요"라고 하면 → "식욕 감소(decreased appetite)"로 바로 분류하고 추가 질문 금지!
-  * 사용자가 "매우 피곤해요"라고 하면 → "피로(fatigue)"로 바로 분류하고 추가 질문 금지!
-  * 사용자가 "가슴이 두근거려요"라고 하면 → "심계항진(palpitations)"로 바로 분류하고 추가 질문 금지!
-- 비슷한 의미라도 목록에 없는 용어는 절대로 사용하지 마세요!
-- 각 카테고리는 배열 형식으로 여러 유형을 기록할 수 있습니다 (예: ["불면증(insomnia)", "수면 유지 곤란"])
-- 문제가 없다면 반드시 "문제 없음"으로 기록하세요.
-
-**Summary String 형식 예시:**
-```
-주요_증상: [사용자가 상담을 요청한 이유와 현재 기분에 대한 설명]
-수면: ["불면증(insomnia)", "입면 곤란(difficulty falling asleep)"]
-식욕_체중: ["식욕 감소(decreased appetite)"]
-활력_에너지: ["피로(fatigue)", "집중력 감소(diminished ability to concentrate)"]
-신체증상: ["심계항진(palpitations)"]
-```
-
-**주요_증상 필드 수집 기준 (매우 중요!)**:
-- 주요증상은 사용자가 상담을 요청한 이유와 현재 기분을 파악할 수 있을 정도면 충분합니다.
-- 너무 짧은 답변(예: "안 좋아요")만 아니면, 사용자가 자연스럽게 말한 내용을 그대로 수집하면 됩니다.
-- 불필요하게 많은 질문을 반복하지 말고, 사용자의 답변에 자연스럽게 공감하며 핵심 정보만 수집하세요.
+(모든 필수 정보가 수집된 경우에만 작성. Context의 `intake_summary_report` 예시 형식을 따를 것)
 """
 
     # Context 문자열 변환
@@ -253,17 +172,10 @@ Summary String:
     # 최대 10개 메시지 (5쌍)로 제한
     if len(previous_history) > 10:
         previous_history = previous_history[-10:]
-        print(f"[Intake Node] 히스토리 길이 제한: {len(previous_history)}개 메시지만 사용")
     
     # 디버깅: 프롬프트 구성 확인
-    print(f"[Intake Node] LLM 호출 준비:")
-    print(f"  - System Instructions 길이: {len(system_instructions)} 문자")
-    print(f"  - Context Data 길이: {len(context_str)} 문자")
-    print(f"  - Full Context 길이: {len(full_context)} 문자")
-    print(f"  - 사용자 입력: {user_input[:100]}...")
-    print(f"  - 히스토리 메시지 수: {len(previous_history)}개 (전체: {len(history)}개)")
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input,
         context=full_context,
         conversation_history=previous_history
@@ -322,14 +234,12 @@ Summary String:
                 if detected_domain and detected_domain.lower() != "none":
                     new_state["domain_questions_active"] = True
                     new_state["current_domain"] = detected_domain
-                    print(f"[Intake Node] 도메인 감지됨: {detected_domain}")
                     break
                     
     # (2) 도메인 질문 완료 처리
     if "DOMAIN_COMPLETED: True" in internal_data:
         new_state["domain_questions_active"] = False
         new_state["current_domain"] = None
-        print(f"[Intake Node] 도메인 질문 완료, 일반 정보 수집 모드로 복귀")
         
     # (3) Summary String (필수 정보 수집 완료) 처리 및 검증
     if "Summary String:" in internal_data:
@@ -386,19 +296,14 @@ Summary String:
                                     new_summary_lines[i] = f"주요_증상: {existing_chief_complaint}"
                                 else:
                                     new_summary_lines[i] = f"주요증상: {existing_chief_complaint}"
-                                print(f"[Intake Node] ✓ 기존 주요_증상 보존: {existing_chief_complaint[:50]}...")
                                 break
                         summary_content = '\n'.join(new_summary_lines)
                 
                 new_state["intake_summary_report"] = summary_content
-                print(f"[Intake Node] ✓ 필수 정보 수집 완료 - Summary 생성 및 다음 단계로 진행")
-                print(f"[Intake Node] 필드 수집 상태: {field_status}")
             else:
                 # 검증 실패: Summary 생성하지 않음
-                print(f"[Intake Node] ⚠ 필수 정보 수집 미완료 - Summary 생성 중단")
-                print(f"[Intake Node] 필드 수집 상태: {field_status}")
                 if missing_fields:
-                    print(f"[Intake Node] Summary에서 누락된 필드: {missing_fields}")
+                    pass
                 # Summary를 생성하지 않았으므로 계속 정보 수집 단계 유지
                 if "Summary String:" in user_message:
                     # 사용자에게 보낼 메시지에서 Summary 부분 제거
@@ -411,4 +316,3 @@ Summary String:
         "messages": [AIMessage(content=user_message)],
         **new_state
     }
-

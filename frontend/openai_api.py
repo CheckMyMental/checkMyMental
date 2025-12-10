@@ -46,21 +46,16 @@ def get_openai_client():
                 api_key=OPENAI_API_KEY,
                 http_client=http_client
             )
-            print("[OpenAI API] 클라이언트 초기화 완료 (프록시 환경 변수 제거 후)")
         except Exception as e:
-            print(f"[OpenAI API] 클라이언트 초기화 오류: {e}")
             # 환경 변수 복원
             for key, value in env_backup.items():
                 os.environ[key] = value
             
             # http_client 없이 재시도
             try:
-                print("[OpenAI API] http_client 없이 재시도...")
                 _client_instance = OpenAI(api_key=OPENAI_API_KEY)
-                print("[OpenAI API] 클라이언트 초기화 완료 (간단 모드)")
             except Exception as e2:
                 import traceback
-                print(traceback.format_exc())
                 raise e2
         finally:
             # 환경 변수 복원
@@ -87,7 +82,7 @@ DEFAULT_MODEL = "gpt-4o-mini"  # 또는 "gpt-4", "gpt-3.5-turbo" 등
 #     OpenAI의 응답 텍스트
 #========================================================================================================
 
-def ask_gemini(
+def ask_openai(
     user_input: str, 
     context: str = None, 
     conversation_history: list = None, 
@@ -96,7 +91,6 @@ def ask_gemini(
 ) -> str:
     """
     OpenAI API를 사용하여 LLM 응답 생성
-    기존 코드와의 호환성을 위해 함수 이름은 ask_gemini로 유지
     """
     try:
         # 모델 선택
@@ -140,15 +134,8 @@ def ask_gemini(
         })
         
         # 디버깅: 프롬프트 구성 확인
-        print(f"[OpenAI API] 프롬프트 구성 완료:")
-        print(f"  - 모델: {model_name}")
-        print(f"  - 시스템 메시지 포함: {'예' if context else '아니오'}")
-        print(f"  - 히스토리 메시지 수: {len(conversation_history) if conversation_history else 0}개")
-        print(f"  - 전체 메시지 수: {len(messages)}개")
         if messages:
             total_length = sum(len(str(m.get("content", ""))) for m in messages)
-            print(f"  - 전체 프롬프트 길이: {total_length} 문자")
-            print(f"  - 첫 번째 메시지 미리보기: {str(messages[0].get('content', ''))[:300]}...")
         
         # API 호출
         openai_client = get_openai_client()
@@ -162,14 +149,11 @@ def ask_gemini(
         # 응답 추출
         response_text = response.choices[0].message.content
         
-        print(f"[OpenAI API] 응답 수신 완료 (길이: {len(response_text)} 문자)")
         
         return response_text
 
     except Exception as e:
         import traceback
-        print(f"[OpenAI API] 오류 발생: {type(e).__name__}: {str(e)}")
-        print(f"[OpenAI API] 상세 에러:\n{traceback.format_exc()}")
         return f"오류가 발생했습니다: {str(e)}"
 
 
@@ -273,7 +257,7 @@ def _format_by_diagnosis(by_diagnosis: dict) -> str:
     return "\n".join(formatted_parts)
 
 
-def ask_gemini_with_stage(
+def ask_openai_with_stage(
     user_input: str,
     prompt_template: str,
     context_data: dict,
@@ -283,7 +267,6 @@ def ask_gemini_with_stage(
 ) -> str:
     """
     단계별 프롬프트와 컨텍스트를 사용하여 OpenAI API 호출
-    기존 코드와의 호환성을 위해 함수 이름 유지
     """
     try:
         model_name = model or DEFAULT_MODEL
@@ -315,7 +298,6 @@ def ask_gemini_with_stage(
                     if hypothesis_report and "Hypothesis String:" in hypothesis_report:
                         hypothesis_content = hypothesis_report.split("Hypothesis String:", 1)[1].strip()
                     input_section = f"## Hypothesis String\n{hypothesis_content}\n\n## RAG Search Results\n{bydiag_formatted}"
-                    print(f"[OpenAI API] Stage 3 input_section 생성 완료 (Hypothesis String + by_diagnosis)")
                 elif "rag_result" in previous_stage_data:
                     rag_result = previous_stage_data.get("rag_result")
                     if rag_result:
@@ -386,8 +368,6 @@ Assistant:"""
             "content": user_input
         })
         
-        print(f"[OpenAI API] 프롬프트 길이: {len(system_content)} 문자")
-        print(f"[OpenAI API] API 호출 시작...")
         
         # API 호출
         openai_client = get_openai_client()
@@ -400,14 +380,10 @@ Assistant:"""
         
         response_text = response.choices[0].message.content
         
-        print(f"[OpenAI API] 응답 수신 완료, 길이: {len(response_text)} 문자")
-        print(f"[OpenAI API] 응답 미리보기: {response_text[:200]}...")
         
         return response_text
 
     except Exception as e:
-        print(f"[OpenAI API] 오류 발생: {type(e).__name__}: {str(e)}")
         import traceback
-        print(f"[OpenAI API] 상세 에러:\n{traceback.format_exc()}")
         return f"오류가 발생했습니다: {str(e)}"
 

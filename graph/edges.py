@@ -21,22 +21,17 @@ def check_intake_complete(state: CounselingState) -> Literal["hypothesis", "__en
     asked = state.get("re_intake_questions_asked", 0)
 
     if is_re_intake:
-        print(f"[Edges] (Re-Intake) 보강 질문 진행 상황: {asked}/3")
 
         # 🔥 Re-Intake: 질문 3개 해야 다음 단계로 넘어갈 수 있음
         if asked >= 3:
-            print("[Edges] (Re-Intake) 보강 질문 완료 → Hypothesis 이동")
             return "hypothesis"
 
-        print("[Edges] (Re-Intake) 질문 부족 → 사용자 입력 대기")
         return "__end__"
 
     # 일반 Intake: summary 생성되면 완료
     if intake_summary:
-        print("[Edges] ✓ Intake 완료 → Hypothesis 이동")
         return "hypothesis"
 
-    print("[Edges] Intake 진행 중 → 사용자 입력 대기")
     return "__end__"
 
 
@@ -46,19 +41,13 @@ def check_validation_outcome(state: CounselingState) -> Literal["severity", "int
     Validation 단계 종료 조건 및 다음 스테이지 분기
     """
 
-    print(f"[Edges] Validation 결과 확인 시작...")
-    print(f"  - is_re_intake: {state.get('is_re_intake')}")
-    print(f"  - severity_diagnosis: {state.get('severity_diagnosis')}")
-    print(f"  - validation_probabilities: {state.get('validation_probabilities')}")
 
     # 🔥 (1) Re-Intake 플래그가 있으면 무조건 Intake로
     if state.get("is_re_intake"):
-        print(f"[Edges] ✓ Validation → Re-Intake 결정 (is_re_intake=True)")
         return "intake"
 
     # 🔥 (2) 확정 진단 있으면 Severity로
     if state.get("severity_diagnosis"):
-        print(f"[Edges] ✓ Validation → Severity 분기")
         return "severity"
 
     # 🔥 (3) 확률 기반 자동 판단
@@ -78,14 +67,11 @@ def check_validation_outcome(state: CounselingState) -> Literal["severity", "int
 
         # 확률 50% 이하 → Re-Intake로 보내기
         if max_prob <= 0.5:
-            print(f"[Edges] ✓ Validation → Re-Intake 결정 (최대 확률 {max_prob} ≤ 0.5)")
             return "intake"
 
         # 아니면 severity
-        print(f"[Edges] ✓ Validation → Severity (Top: {top_diagnosis})")
         return "severity"
 
-    print("[Edges] Validation 진행 중 → 사용자 입력 대기")
     return "__end__"
 
 
@@ -98,8 +84,6 @@ def check_severity_complete(state: CounselingState) -> Literal["solution", "__en
     severity_result = state.get("severity_result_string")
 
     if severity_result:
-        print("[Edges] ✓ Severity 완료 → Solution 이동")
         return "solution"
 
-    print("[Edges] Severity 진행 중 → 사용자 입력 대기")
     return "__end__"

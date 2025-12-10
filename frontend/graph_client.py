@@ -37,7 +37,6 @@ class GraphClient:
         # 체크포인터를 주입하여 그래프 빌드 (컴파일)
         self._graph = build_graph(checkpointer=self._checkpointer)
         
-        print("[GraphClient] Graph initialized with MemorySaver")
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -84,8 +83,6 @@ class GraphClient:
             "messages": [HumanMessage(content=user_input)]
         }
         
-        print(f"[GraphClient] 그래프 실행 시작 - thread_id: {thread_id}")
-        print(f"[GraphClient] 사용자 입력: {user_input[:100]}...")
         
         try:
             # 그래프 실행 (END에 도달할 때까지 자동 진행)
@@ -94,16 +91,12 @@ class GraphClient:
             # 실행 결과 로그
             intake_summary = result.get("intake_summary_report")
             if intake_summary:
-                print(f"[GraphClient] ✓ intake_summary_report 생성됨 (길이: {len(intake_summary)} 문자)")
-            print(f"[GraphClient] 실행 완료 - 메시지 수: {len(result.get('messages', []))}")
+                pass
             
             return result
         except Exception as e:
             import traceback
             error_msg = str(e)
-            print(f"[GraphClient] ✗ 그래프 실행 중 오류 발생: {error_msg}")
-            print(f"[GraphClient] 오류 타입: {type(e).__name__}")
-            print(f"[GraphClient] 상세 traceback:")
             traceback.print_exc()
             raise  # 상위로 전파
 

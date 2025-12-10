@@ -3,7 +3,7 @@ import re  # 모듈을 맨 위에서 import 하는 것이 정석입니다.
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.openai_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file, load_prompt_from_file
 
 def validation_node(state: CounselingState) -> Dict[str, Any]:
@@ -15,9 +15,6 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     - 마지막: 모든 답변 수집 후 확률 계산 및 결과 도출
     """
     
-    print("=" * 60)
-    print("[Stage 3: Validation] 노드 실행 시작")
-    print("=" * 60)
     
     messages = state['messages']
     last_message = messages[-1] if messages else None
@@ -31,25 +28,22 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     # 이미 확률이 계산되었으면 더 이상 질문하지 않고 빈 상태 반환 (edges.py에서 자동 분기)
     existing_probabilities = state.get("validation_probabilities")
     if existing_probabilities:
-        print("[Validation Node] ⚠️ 이미 확률 계산 완료됨 - 더 이상 질문 생성하지 않음, edges.py에서 자동 분기")
         # 빈 상태 반환하여 edges.py에서 자동으로 다음 단계로 분기하도록 함
         return {}
 
     # 프롬프트 로드 (매번 새로 로드하여 최신 상태 유지)
-    print(f"[Validation Node] 프롬프트 및 컨텍스트 파일 로드 시작...")
     base_prompt = load_prompt_from_file("stage3_validation.md")
     if not base_prompt:
         base_prompt = "기본 프롬프트 로드 실패: 파일을 찾을 수 없습니다."
-        print(f"[Validation Node] ⚠ 프롬프트 파일 로드 실패: stage3_validation.md")
     else:
-        print(f"[Validation Node] ✓ 프롬프트 로드 완료: stage3_validation.md ({len(base_prompt)} 문자)")
+        pass
 
     # Context 로드 (매번 새로 로드)
     validation_context = load_context_from_file("stage_specific/context_stage3_validation.json")
     if validation_context:
-        print(f"[Validation Node] ✓ 컨텍스트 로드 완료: context_stage3_validation.json ({len(validation_context)} 문자)")
+        pass
     else:
-        print(f"[Validation Node] ⚠ 컨텍스트 로드 실패: context_stage3_validation.json")
+        pass
     
     # JSON 데이터 문자열 준비
     criteria_json_str = json.dumps(hypothesis_criteria, ensure_ascii=False, indent=2)
@@ -117,7 +111,6 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
                 if disease_lower in content and ("질문" in content or "question" in content or "선택" in content or "1~5" in content or "1-5" in content):
                     if disease not in questioned_diseases:
                         questioned_diseases.append(disease)
-                        print(f"[Validation Node] 질병 '{disease}' 질문 감지됨")
         elif isinstance(msg, HumanMessage):
             # 사용자 응답이 있으면 (숫자나 답변 패턴) 질문에 답변한 것으로 간주
             user_content = msg.content.strip()
@@ -145,7 +138,6 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
                     for disease in disease_list:
                         if disease.lower() in prev_content:
                             qa_pairs_by_disease[disease] = qa_pairs_by_disease.get(disease, 0) + 1
-                            print(f"[Validation Node] 질병 '{disease}'에 대한 답변 감지 (총 {qa_pairs_by_disease[disease]}회)")
     
     # 남은 질병 목록
     remaining_diseases = [d for d in disease_list if d not in questioned_diseases]
@@ -163,20 +155,10 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     
     all_questions_complete = all_diseases_questioned and sufficient_responses
     
-    print(f"[Validation Node] 히스토리 메시지 수: {len(history)}개 (전체: {len(messages)}개)")
-    print(f"[Validation Node] 질문 진행 상태:")
-    print(f"  - 전체 질병 목록: {disease_list}")
-    print(f"  - 이미 질문한 질병: {questioned_diseases}")
-    print(f"  - 남은 질병: {remaining_diseases}")
-    print(f"  - 질문-답변 쌍: {qa_pairs_by_disease}")
-    print(f"  - 사용자 응답 총 개수: {user_responses_count}")
-    print(f"  - 모든 질병 질문 완료: {all_diseases_questioned}")
-    print(f"  - 충분한 응답 수집: {sufficient_responses}")
-    print(f"  - 모든 질문 완료 여부: {all_questions_complete}")
     
     # 모든 질문이 완료되었으면 강제로 확률 계산 단계로 이동
     if all_questions_complete:
-        print("[Validation Node] ⚠️ 모든 질문 완료! 확률 계산 단계로 강제 이동")
+        pass
 
     validation_json_example = '{"질환A": 0.7, "질환B": 0.4}'
 
@@ -263,9 +245,8 @@ Validation JSON: """
     # 모든 질문이 완료되었다면 강제로 확률 계산 요청 (기존 확률이 없을 때만)
     if all_questions_complete and not existing_probabilities:
         user_input = "⚠️⚠️⚠️ 모든 질병에 대한 질문이 완료되었습니다. 절대로 더 이상 질문하지 마세요! 지금 바로 모든 질환에 대한 확률을 계산하고 결과를 도출해주세요. 반드시 ---INTERNAL_DATA--- 섹션에 Validated String과 Validation JSON을 포함하세요. 더 이상 어떤 질문도 생성하지 마세요!"
-        print("[Validation Node] ⚠️ 모든 질문 완료됨 - 확률 계산 강제 요청 (질문 금지)")
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input if user_input else "Validation 단계를 시작합니다. 질문을 생성해주세요.",
         context=full_context,
         conversation_history=history
@@ -313,7 +294,6 @@ Validation JSON: """
     
     # JSON만 남았거나 메시지가 너무 짧은 경우 검증
     if len(user_message) < 20 or re.search(r'^[\s\{\[\}\]]+$', user_message):
-        print("[Validation Node] ⚠ 사용자 메시지에서 JSON만 발견되어 제거됨, 기본 메시지 사용")
         # 이전 응답에서 자연스러운 부분 찾기
         if "---INTERNAL_DATA---" in response_text:
             original = response_text.split("---INTERNAL_DATA---")[0].strip()
@@ -333,7 +313,6 @@ Validation JSON: """
             probabilities = json.loads(json_str)
             new_state["validation_probabilities"] = probabilities
             
-            print(f"[Validation Node] ✓ 확률 계산 완료: {probabilities}")
             
             # 확률 체크
             max_prob = 0.0
@@ -345,44 +324,34 @@ Validation JSON: """
             if max_prob <= 0.5:
                 new_state["is_re_intake"] = True
                 new_state["severity_diagnosis"] = None # 진단 유보
-                print(f"[Validation Node] → Re-Intake 결정 (최대 확률: {max_prob} <= 0.5)")
-                print(f"[Validation Node] ✓ 상태 설정 완료: is_re_intake=True, severity_diagnosis=None")
             else:
                 new_state["is_re_intake"] = False
                 # 확률이 가장 높은 질환을 severity_diagnosis로 자동 설정
                 top_diagnosis = max(probabilities.items(), key=lambda x: x[1])[0]
                 new_state["severity_diagnosis"] = top_diagnosis
-                print(f"[Validation Node] → Severity 단계로 진행 (최대 확률: {max_prob}, Top 질환: {top_diagnosis})")
-                print(f"[Validation Node] ✓ 상태 설정 완료: is_re_intake=False, severity_diagnosis={top_diagnosis}")
                 
         except Exception as e:
-            print(f"[Validation Node] ✗ Validation JSON 파싱 오류: {e}")
+            pass
             
     if "Validated String:" in internal_data:
         diagnosis = internal_data.split("Validated String:")[1].strip()
         # "None"이 아니고 재탐색 모드가 아니면 진단명 설정
         if diagnosis.lower() != "none" and not new_state.get("is_re_intake", False):
              new_state["severity_diagnosis"] = diagnosis
-             print(f"[Validation Node] ✓ 확정 진단명: {diagnosis}")
     
     # ⚠️ 중요: 모든 질문이 완료되었는데도 LLM이 확률을 계산하지 않은 경우 강제 처리
     if all_questions_complete and not new_state.get("validation_probabilities"):
-        print("[Validation Node] ⚠️⚠️⚠️ 모든 질문 완료되었으나 확률 계산되지 않음 - 코드 레벨에서 강제 처리")
         # 모든 질병에 대해 낮은 확률로 설정 (모두 0.3 이하) -> Re-Intake로 자동 분기
         forced_probabilities = {disease: 0.3 for disease in disease_list}
         new_state["validation_probabilities"] = forced_probabilities
         new_state["is_re_intake"] = True
         new_state["severity_diagnosis"] = None
         user_message = "검증이 완료되었습니다. 추가 정보가 필요하여 다시 질문드리겠습니다."
-        print(f"[Validation Node] ✓ 강제 확률 설정: {forced_probabilities} -> Re-Intake")
-        print(f"[Validation Node] ✓ 상태 설정 완료: is_re_intake=True, severity_diagnosis=None")
     
     # 확률이 계산되었으면 더 이상 질문하지 않도록 사용자 메시지 수정
     if new_state.get("validation_probabilities"):
         if not all_questions_complete:  # 모든 질문 완료 전에 확률이 계산된 경우만 메시지 변경
             user_message = "검증이 완료되었습니다. 결과를 분석하겠습니다."
-        print("[Validation Node] ⚠️ 확률 계산 완료 - 더 이상 질문하지 않음")
-        print(f"[Validation Node] 최종 상태: is_re_intake={new_state.get('is_re_intake')}, severity_diagnosis={new_state.get('severity_diagnosis')}")
         
     return {
         "messages": [AIMessage(content=user_message)],

@@ -51,6 +51,10 @@ class CounselingState(TypedDict):
     # Severity Stage (4단계: 심각도 평가)
     severity_diagnosis: Optional[str]      # 심각도 평가 대상으로 선정된 질환명 (Top 1)
     severity_result_string: Optional[str]  # 심각도 평가 결과 텍스트
+    # 심각도 평가용 질문/응답 내부 상태
+    severity_questions: Optional[List[Dict[str, Any]]]  # 미리 생성된 심각도 질문 리스트
+    severity_current_index: int                         # 다음에 물어볼 심각도 질문 인덱스 (0-based)
+    severity_answers: Optional[List[int]]               # 각 심각도 질문에 대한 1~5점 응답
     
     # Solution Stage (5단계: 솔루션)
     final_summary_string: Optional[str]  # 전체 상담 과정(1, 3, 4단계) 요약문

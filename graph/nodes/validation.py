@@ -40,6 +40,11 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
     current_index: int = state.get("validation_current_index", 0)
     answers: List[int] = state.get("validation_answers") or []
 
+    print(
+        f"[Validation Debug] questions_in_state={len(validation_questions)}, "
+        f"current_index={current_index}, answers_len={len(answers)}"
+    )
+
     def build_question_message(
         question_text: str,
         *,
@@ -84,6 +89,7 @@ def validation_node(state: CounselingState) -> Dict[str, Any]:
 
     # 1) 아직 질문 리스트가 없는 경우 → 한 번만 LLM으로 전체 질문 생성
     if not validation_questions:
+        print("[Validation Debug] 질문 리스트 없음 → LLM으로 새로 생성")
         prompt_path = Path("prompts/stage3_validation.md")
         try:
             if prompt_path.exists():
@@ -153,6 +159,10 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
         first_question = questions[0].get("text", "첫 번째 질문을 불러오지 못했습니다.")
         total_q = len(questions)
 
+        print(
+            f"[Validation Debug] 질문 생성 완료: total_questions={len(questions)}. "
+            "State에 validation_questions 저장 후 첫 질문 반환."
+        )
         return {
             "messages": [
                 AIMessage(
@@ -222,10 +232,19 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
 
         current_index += 1
 
+        print(
+            f"[Validation Debug] 응답 수신: answer={answer_value}, "
+            f"next_index={current_index}/{total_q}"
+        )
+
         # 아직 남은 질문이 있다면 → 다음 질문을 동일 포맷으로 직접 출력 (LLM 재호출 없음)
         if current_index < total_q:
             next_q = validation_questions[current_index]
             next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
+            print(
+                f"[Validation Debug] 다음 질문 진행: index={current_index}, "
+                f"text_preview={next_text[:30]}"
+            )
             return {
                 "messages": [
                     AIMessage(
@@ -243,6 +262,10 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
             }
 
     # 3) 모든 질문에 답변이 완료된 경우 → 별도 프롬프트로 LLM 호출하여 확률 계산/분기 처리
+    print(
+        "[Validation Debug] 모든 질문에 대한 응답 완료 → "
+        "평가용 LLM 호출 (Validation Result 계산)"
+    )
     eval_prompt = """
 당신은 임상 심리사입니다. 아래 의심 질환 및 각 질환의 진단 기준,
 그리고 각 질문에 대한 사용자의 1~5점 응답을 기반으로
@@ -318,7 +341,15 @@ Validation JSON: {{"질환A": 0.7, "질환B": 0.4, ...}}
             print(f"Validation JSON 파싱 오류: {e}")
 
     if "Validated String:" in internal_data:
-        diagnosis = internal_data.split("Validated String:", 1)[1].strip()
+        # Validated String 뒤에 Validation JSON 등이 이어져 있을 수 있으므로,
+        # 먼저 해당 구간만 잘라낸 뒤 공백/괄호 등을 정리해서 질환명만 추출한다.
+        segment = internal_data.split("Validated String:", 1)[1]
+        # Validation JSON 이전까지만 사용
+        if "Validation JSON:" in segment:
+            segment = segment.split("Validation JSON:", 1)[0]
+        diagnosis = segment.strip()
+        # 양쪽 대괄호/따옴표 등 불필요한 감싸는 문자 제거
+        diagnosis = diagnosis.strip("[]\"' ")
         if diagnosis.lower() != "none" and not new_state.get("is_re_intake", False):
             new_state["severity_diagnosis"] = diagnosis
 

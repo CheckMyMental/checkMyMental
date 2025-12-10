@@ -21,9 +21,9 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
         # 초기 진입 시 (메시지가 없을 경우)
         user_input = "상담을 시작합니다."  # 내부 트리거, 사용자가 입력하는건 아님.
     else:
-        last_message = messages[-1]  # 마지막 사용자 메세지 추출
+        last_message = messages[-1]  # 마지막 메시지
         if isinstance(last_message, HumanMessage):
-            user_input = last_message.content
+            user_input = last_message.content or ""
         else:
             # 시스템이나 AI 메시지가 마지막인 경우 (드물지만 방어 코드)
             user_input = "계속 진행해주세요."
@@ -31,28 +31,39 @@ def intake_node(state: CounselingState) -> Dict[str, Any]:
     # 1-1. 개발자용 치트키 처리 (요약 강제 주입)
     # 사용자가 "우울증패스"라고 입력하면, Intake 과정을 생략하고
     # 미리 정의된 Summary String을 바로 state에 주입하여 다음 단계로 넘어갑니다.
-    if isinstance(messages[-1], HumanMessage) and messages[-1].content.strip() == "우울증패스":
-        hardcoded_summary = (
-            "주요_증상: 시험에 대한 불안감. "
-            "수면: 자주 깨는 문제. "
-            "식욕_체중: 식욕 감소로 체중 감소. "
-            "활력_에너지: 에너지 부족과 피로감. "
-            "신체증상: 소화 문제."
-        )
+    # 최근 HumanMessage를 기준으로 검사하여, 중간에 AI 메시지가 끼어도 동작하도록 함.
+    last_human = None
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_human = msg
+            break
 
-        dev_msg = (
-            "개발자 모드: 입력하신 치트키에 따라, 다음과 같은 고정 요약으로 "
-            "가설 설정 단계로 바로 진행합니다.\n\n"
-            f"{hardcoded_summary}"
-        )
+    if last_human is not None:
+        key = (last_human.content or "").strip().replace(" ", "")
+        if key == "우울증패스":
+            hardcoded_summary = (
+                "주요_증상: 극심한 무기력감과 우울한 기분이 거의 매일 지속됨. "
+                "수면: 깊게 잠들지 못하고 자주 깨며, 새벽에 일찍 깸. "
+                "식욕_체중: 식욕 저하로 최근 체중이 급격히 감소함. "
+                "활력_에너지: 에너지가 거의 없고, 일상적인 일에도 심한 피로감을 느낌. "
+                "신체증상: 가슴이 답답하고 두통 및 만성적인 통증이 동반됨."
+            )
 
-        return {
-            "messages": [AIMessage(content=dev_msg)],
-            "intake_summary_report": hardcoded_summary,
-            "domain_questions_active": False,
-            "current_domain": None,
-            "is_re_intake": False,
-        }
+            dev_msg = (
+                "개발자 모드: 입력하신 치트키에 따라, 다음과 같은 고정 요약으로 "
+                "가설 설정 단계로 바로 진행합니다.\n\n"
+                f"{hardcoded_summary}"
+            )
+
+            print("[Intake Debug] 우울증패스 치트키 활성화")
+
+            return {
+                "messages": [AIMessage(content=dev_msg)],
+                "intake_summary_report": hardcoded_summary,
+                "domain_questions_active": False,
+                "current_domain": None,
+                "is_re_intake": False,
+            }
             
     # OpenAI API용 히스토리 변환
     history = []

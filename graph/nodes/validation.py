@@ -170,57 +170,77 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
         }
 
     # 2) 질문 리스트는 이미 있고, 사용자 답변(1~5)을 받아 다음 질문으로 진행
-    # 사용자 입력에서 1~5 사이 숫자 추출
-    answer_value: Optional[int] = None
-    if user_input:
-        match = re.search(r"[1-5]", user_input)
-        if match:
-            try:
-                answer_value = int(match.group(0))
-            except ValueError:
-                answer_value = None
 
-    if answer_value is None:
-        # 올바른 입력이 아니면 안내 메시지
-        return {
-            "messages": [
-                AIMessage(
-                    content=(
-                        "답변을 이해하지 못했어요. 1, 2, 3, 4, 5 중 하나의 숫자로 "
-                        "현재 상태에 가장 가까운 정도를 입력해 주세요."
-                    )
-                )
-            ]
-        }
-
-    # 현재 질문에 대한 답변 저장
-    if len(answers) <= current_index:
-        answers.append(answer_value)
-    else:
-        answers[current_index] = answer_value
-
-    current_index += 1
-
-    # 아직 남은 질문이 있다면 → 다음 질문을 동일 포맷으로 직접 출력 (LLM 재호출 없음)
+    # 2-1) 개발자용 치트키: "개발자 상" / "개발자 하"
     total_q = len(validation_questions)
-    if current_index < total_q:
-        next_q = validation_questions[current_index]
-        next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
-        return {
-            "messages": [
-                AIMessage(
-                    content=build_question_message(
-                        next_text,
-                        is_first=False,
-                        question_index=current_index + 1,
-                        total_questions=total_q,
+    key = user_input.strip().replace(" ", "")
+    if total_q > 0 and key:
+        if key == "개발자상":
+            answers = [5] * total_q
+            current_index = total_q
+        elif key == "개발자하":
+            answers = [1] * total_q
+            current_index = total_q
+
+        if key in ("개발자상", "개발자하"):
+            # 치트키가 적용된 경우, 바로 평가 단계로 진행
+            pass
+        else:
+            # 치트키가 아니면 아래 일반 흐름으로 진행
+            total_q = len(validation_questions)  # keep for later
+
+    # 2-2) 일반 흐름: 질문별로 1~5 답변을 하나씩 받기
+    if current_index < total_q and key not in ("개발자상", "개발자하"):
+        # 사용자 입력에서 1~5 사이 숫자 추출
+        answer_value: Optional[int] = None
+        if user_input:
+            match = re.search(r"[1-5]", user_input)
+            if match:
+                try:
+                    answer_value = int(match.group(0))
+                except ValueError:
+                    answer_value = None
+
+        if answer_value is None:
+            # 올바른 입력이 아니면 안내 메시지
+            return {
+                "messages": [
+                    AIMessage(
+                        content=(
+                            "답변을 이해하지 못했어요. 1, 2, 3, 4, 5 중 하나의 숫자로 "
+                            "현재 상태에 가장 가까운 정도를 입력해 주세요."
+                        )
                     )
-                )
-            ],
-            "validation_questions": validation_questions,
-            "validation_current_index": current_index,
-            "validation_answers": answers,
-        }
+                ]
+            }
+
+        # 현재 질문에 대한 답변 저장
+        if len(answers) <= current_index:
+            answers.append(answer_value)
+        else:
+            answers[current_index] = answer_value
+
+        current_index += 1
+
+        # 아직 남은 질문이 있다면 → 다음 질문을 동일 포맷으로 직접 출력 (LLM 재호출 없음)
+        if current_index < total_q:
+            next_q = validation_questions[current_index]
+            next_text = next_q.get("text", "다음 질문을 불러오지 못했습니다.")
+            return {
+                "messages": [
+                    AIMessage(
+                        content=build_question_message(
+                            next_text,
+                            is_first=False,
+                            question_index=current_index + 1,
+                            total_questions=total_q,
+                        )
+                    )
+                ],
+                "validation_questions": validation_questions,
+                "validation_current_index": current_index,
+                "validation_answers": answers,
+            }
 
     # 3) 모든 질문에 답변이 완료된 경우 → 별도 프롬프트로 LLM 호출하여 확률 계산/분기 처리
     eval_prompt = """

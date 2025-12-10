@@ -151,7 +151,7 @@ def get_current_stage_info():
 
 def _build_final_result_card(state: Dict[str, Any]) -> Optional[str]:
     """
-    최종 단계에서 의심 질환/확률 및 최종 평가 질환을
+    최종 단계에서 최종 평가 질환과 해당 확률(가능한 경우)을
     시각적으로 보기 좋게 정리한 HTML 카드 생성.
     """
     validation_probs = state.get("validation_probabilities") or {}
@@ -161,14 +161,14 @@ def _build_final_result_card(state: Dict[str, Any]) -> Optional[str]:
     if not validation_probs and not severity_dx:
         return None
 
-    # 질환별 확률 정렬
-    items = []
-    try:
-        items = sorted(
-            validation_probs.items(), key=lambda x: float(x[1]), reverse=True
-        )
-    except Exception:
-        items = list(validation_probs.items())
+    # 최종 질환에 대한 확률만 추출 (있을 때만)
+    final_prob = None
+    if severity_dx and validation_probs:
+        try:
+            if severity_dx in validation_probs:
+                final_prob = float(validation_probs[severity_dx])
+        except Exception:
+            final_prob = None
 
     lines = []
     lines.append(
@@ -187,48 +187,35 @@ def _build_final_result_card(state: Dict[str, Any]) -> Optional[str]:
     )
     lines.append(
         '<div style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">'
-        "이번 상담을 바탕으로 분석된 질환 후보와 최종 평가 결과입니다."
+        "이번 상담을 바탕으로 계산된 최종 평가 질환과 그 의미를 정리한 내용입니다."
         "</div>"
     )
 
-    # Validation 확률 영역
-    if items:
-        lines.append(
-            '<div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">질환별 검증 확률</div>'
-        )
-        for diag_name, prob in items:
-            try:
-                p = float(prob)
-            except Exception:
-                continue
-
-            bar_value = p if p <= 1.0 else p / 100.0
-            pct = p * 100 if p <= 1.0 else p
-            pct = max(0.0, min(pct, 100.0))
-            bar_value = max(0.0, min(bar_value, 1.0))
-
-            lines.append(
-                f'<div style="font-size: 0.85rem; margin-top: 4px;"><span style="font-weight:600;">{diag_name}</span> '
-                f'<span style="color:#555; font-size:0.8rem;">{pct:.0f}%</span></div>'
-            )
-            # Progress bar
-            bar_width = int(bar_value * 100)
-            lines.append(
-                f"""
-<div style="width: 100%; height: 6px; background: #f1f1f1; border-radius: 999px; overflow: hidden; margin-top: 2px;">
-  <div style="width: {bar_width}%; height: 100%; background: linear-gradient(90deg, #4f46e5, #22c55e);"></div>
-</div>
-"""
-            )
-
-    # 최종 평가 질환 영역
+    # 최종 평가 질환 영역 (+ 가능하면 해당 확률 퍼센트)
     if severity_dx:
         lines.append(
             '<div style="margin-top: 12px; font-weight: 600; font-size: 0.9rem;">최종 평가 질환</div>'
         )
+        subtitle = ""
+        if final_prob is not None:
+            pct = final_prob * 100 if final_prob <= 1.0 else final_prob
+            pct = max(0.0, min(pct, 100.0))
+            subtitle = f" (추정 확률 약 {pct:.0f}%)"
+            # 퍼센트 바 (최종 질환만)
+            bar_value = final_prob if final_prob <= 1.0 else final_prob / 100.0
+            bar_value = max(0.0, min(bar_value, 1.0))
         lines.append(
-            f'<div style="font-size: 0.9rem; margin-top: 2px;"><span style="font-weight:700; color:#2c3e50;">{severity_dx}</span></div>'
+            f'<div style="font-size: 0.9rem; margin-top: 2px;"><span style="font-weight:700; color:#2c3e50;">{severity_dx}</span>{subtitle}</div>'
         )
+        if final_prob is not None:
+            bar_width = int(bar_value * 100)
+            lines.append(
+                f"""
+<div style="width: 100%; height: 7px; background: #f1f1f1; border-radius: 999px; overflow: hidden; margin-top: 4px; margin-bottom: 4px;">
+  <div style="width: {bar_width}%; height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e);"></div>
+</div>
+"""
+            )
         if severity_text:
             preview = (
                 severity_text[:180] + "..."
@@ -241,11 +228,3 @@ def _build_final_result_card(state: Dict[str, Any]) -> Optional[str]:
 
     lines.append("</div>")
     return "\n".join(lines)
-    
-    stage_num = stage_map.get(current_node, 0)
-    
-    return {
-        "stage": stage_num,
-        "name": current_node,
-        "total_stages": 5
-    }

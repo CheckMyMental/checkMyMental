@@ -43,3 +43,5 @@ documents/
 
 #extract disorders
 rag/extract_disorders.py
+
+temp

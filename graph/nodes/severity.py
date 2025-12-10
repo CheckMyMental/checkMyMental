@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 
 def severity_node(state: CounselingState) -> Dict[str, Any]:
@@ -31,6 +31,7 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
     # 여기서는 간단한 매핑 로직 예시 적용
     
     disease_context = ""
+    disease_context_file = None
     try:
         # 질환명에서 핵심 단어 추출 (간단히 소문자화하여 파일 찾기 시도)
         # 실제로는 더 정교한 매핑이 필요할 수 있음 (Mapping DB 등)
@@ -55,7 +56,8 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
             # 파일명 직접 매칭 시도
             filename = f"{disease_key}.json"
             
-        loaded_context = load_context_from_file(f"diseases/{filename}")
+        disease_context_file = f"diseases/{filename}"
+        loaded_context = load_context_from_file(disease_context_file)
         if loaded_context:
             disease_context = loaded_context
         else:
@@ -68,17 +70,24 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
 
     # 3. 프롬프트 로드
     prompt_path = Path("prompts/stage4_severity.md")
+    sources = []
     try:
         if prompt_path.exists():
             with open(prompt_path, "r", encoding="utf-8") as f:
                 base_prompt = f.read()
         else:
             base_prompt = "기본 프롬프트 로드 실패"
+        sources.append(str(prompt_path))
     except Exception as e:
         base_prompt = f"프롬프트 로드 오류: {e}"
         
     # 4. 공통 Severity Context 로드
-    common_severity_context = load_context_from_file("stage_specific/context_stage4_severity.json")
+    common_context_file = "stage_specific/context_stage4_severity.json"
+    common_severity_context = load_context_from_file(common_context_file)
+    if common_severity_context:
+        sources.append(common_context_file)
+    if disease_context_file:
+        sources.append(disease_context_file)
 
     # 5. 시스템 지시사항 구성
     system_instructions = f"""
@@ -106,14 +115,16 @@ Severity JSON: {{"diagnosis": "{target_diagnosis}", "level": "...", "score": "..
 """
 
     # 6. LLM 호출
-    # ask_gemini 사용 (히스토리 포함)
+    # ask_openai 사용 (히스토리 포함)
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     previous_history = history[:-1] if history else []
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input=user_input if user_input else f"{target_diagnosis}에 대한 심각도 평가를 시작합니다.",
         context=system_instructions, # context 인자에 시스템 프롬프트 전체를 넘김
-        conversation_history=previous_history
+        conversation_history=previous_history,
+        stage_name="severity",
+        context_sources=sources,
     )
     
     # 7. 응답 파싱 및 State 업데이트

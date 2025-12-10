@@ -75,7 +75,7 @@ pip install -r requirements.txt
 
 ### 5️⃣ 환경 변수 설정
 
-Gemini API 키를 저장할 `.env` 파일을 만듭니다.
+OpenAI API 키를 저장할 `.env` 파일을 만듭니다.
 
 ```bash
 touch .env
@@ -84,7 +84,7 @@ touch .env
 그리고 아래 내용을 추가하세요.
 
 ```
-GEMINI_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_api_key_here
 ```
 
 > ⚠️ `.env` 파일은 절대 Git에 올리지 마세요.  

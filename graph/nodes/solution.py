@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage
 from graph.state import CounselingState
-from frontend.gemini_api import ask_gemini
+from frontend.openai_api import ask_openai
 from frontend.context_handler import load_context_from_file
 from api.rag_service import retrieve_solution
 
@@ -57,16 +57,21 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
 
     # 3. 프롬프트 및 컨텍스트 로드
     prompt_path = Path("prompts/stage5_solution.md")
+    sources = []
     try:
         if prompt_path.exists():
             with open(prompt_path, "r", encoding="utf-8") as f:
                 base_prompt = f.read()
         else:
             base_prompt = "기본 프롬프트 로드 실패"
+        sources.append(str(prompt_path))
     except Exception as e:
         base_prompt = f"프롬프트 로드 오류: {e}"
         
-    solution_context_guide = load_context_from_file("stage_specific/context_stage5_solution.json")
+    solution_context_file = "stage_specific/context_stage5_solution.json"
+    solution_context_guide = load_context_from_file(solution_context_file)
+    if solution_context_guide:
+        sources.append(solution_context_file)
 
     # 4. 시스템 지시사항 구성
     system_instructions = f"""
@@ -96,15 +101,17 @@ def solution_node(state: CounselingState) -> Dict[str, Any]:
     # 5. LLM 호출
     # Solution 단계는 대화형이 아니라 일방적인 리포트 생성이므로
     # 히스토리를 참고하되, 사용자 입력은 별도로 필요하지 않음.
-    # ask_gemini 호출 시 user_input을 빈 문자열이나 지시어로 대체 가능.
+    # ask_openai 호출 시 user_input을 빈 문자열이나 지시어로 대체 가능.
     
     messages = state['messages']
     history = [{"role": "user" if isinstance(m, HumanMessage) else "model", "content": m.content} for m in messages]
     
-    response_text = ask_gemini(
+    response_text = ask_openai(
         user_input="최종 솔루션 리포트를 작성해주세요.",
         context=system_instructions,
-        conversation_history=history
+        conversation_history=history,
+        stage_name="solution",
+        context_sources=sources,
     )
     
     # 6. 결과 반환

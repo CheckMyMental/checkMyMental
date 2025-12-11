@@ -196,9 +196,11 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
 ## 공통 가이드라인
 {common_severity_context}
 
-## 안내
-- 지금은 '질문 생성 모드'입니다.
-- 사용자에게는 자연스러운 안내 문장만 보여 주고, 실제 질문 리스트는 INTERNAL_DATA 섹션에 JSON으로만 제공하세요.
+## 출력 지침 (질문 생성 모드)
+- 화면에 노출되는 영역에는 질문 리스트 JSON을 포함하지 마세요.
+- 사용자에게는 자연스러운 안내 문장만 보여주세요.
+- 아래 INTERNAL_DATA 형식을 따라, 모든 질문 리스트를 JSON으로 제공하세요.
+- INTERNAL_DATA 섹션은 반드시 포함되어야 합니다.
 
 ---INTERNAL_DATA---
 Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": "..."}}]}}

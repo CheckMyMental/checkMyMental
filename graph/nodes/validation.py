@@ -129,13 +129,20 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
             conversation_history=None,
         )
 
+        print(f"[Validation Debug] LLM 응답 길이: {len(response_text)}")
+        print(f"[Validation Debug] LLM 응답 처음 500자:\n{response_text[:500]}")
+
         internal_data = ""
         if "---INTERNAL_DATA---" in response_text:
             parts = response_text.split("---INTERNAL_DATA---", 1)
             internal_data = parts[1].strip()
+            print(f"[Validation Debug] INTERNAL_DATA 추출 성공, 길이: {len(internal_data)}")
+        else:
+            print("[Validation Debug] 응답에 ---INTERNAL_DATA--- 섹션이 없습니다.")
 
         questions: List[Dict[str, Any]] = []
         if "Questions JSON:" in internal_data:
+            print("[Validation Debug] Questions JSON: 발견됨, 파싱 시작")
             try:
                 # INTERNAL_DATA 안에서 "Questions JSON:" 뒤에 나오는
                 # 가장 바깥 { ... } 블록을 중괄호 깊이 계산으로 안전하게 추출
@@ -143,12 +150,14 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
                     "Questions JSON:"
                 )
                 substring = internal_data[start_pos:]
+                print(f"[Validation Debug] Questions JSON 뒤 부분 (앞 200자): {substring[:200]}")
 
                 # 코드블록이 있다면 먼저 건너뛰기 (```로 시작하는 경우)
                 code_fence_index = substring.find("```")
                 if code_fence_index != -1 and code_fence_index < substring.find("{"):
                     # ``` 이후부터 다시 탐색
                     substring = substring[code_fence_index + 3 :]
+                    print("[Validation Debug] 코드 펜스 건너뜀")
 
                 brace_start = substring.find("{")
                 if brace_start == -1:
@@ -156,6 +165,7 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
                         "[Validation Debug] Questions JSON 뒤에서 여는 중괄호를 찾지 못했습니다."
                     )
                 else:
+                    print(f"[Validation Debug] 여는 중괄호 위치: {brace_start}")
                     depth = 0
                     end_idx: Optional[int] = None
                     for i, ch in enumerate(substring[brace_start:]):
@@ -172,22 +182,33 @@ Questions JSON: {{"questions": [{{"id": "q1", "text": "...", "target_diagnosis":
                         )
                     else:
                         q_str = substring[brace_start : end_idx + 1].strip()
+                        print(f"[Validation Debug] 추출된 JSON 문자열 길이: {len(q_str)}")
+                        print(f"[Validation Debug] 추출된 JSON (앞 300자): {q_str[:300]}")
+
                         # 혹시 뒤에 ```가 붙어 있다면 제거
                         if q_str.endswith("```"):
                             q_str = q_str.rsplit("```", 1)[0].strip()
+                            print("[Validation Debug] 뒤 코드 펜스 제거함")
 
                         questions_json = json.loads(q_str)
+                        print(f"[Validation Debug] JSON 파싱 성공, type: {type(questions_json)}")
+
                         if isinstance(questions_json, dict) and isinstance(
                             questions_json.get("questions"), list
                         ):
                             questions = questions_json["questions"]
+                            print(f"[Validation Debug] questions 리스트 추출 성공, 길이: {len(questions)}")
                         else:
                             print(
                                 "[Validation Debug] Questions JSON 구조가 예상과 다릅니다: "
-                                f"type={type(questions_json)}"
+                                f"type={type(questions_json)}, keys={questions_json.keys() if isinstance(questions_json, dict) else 'N/A'}"
                             )
             except Exception as e:
-                print(f"Validation Questions JSON 파싱 오류: {e}")
+                print(f"[Validation Debug] Questions JSON 파싱 오류: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[Validation Debug] INTERNAL_DATA에 'Questions JSON:' 문자열 없음")
 
         if not questions:
             # 질문 생성 실패 시 에러 메시지 반환

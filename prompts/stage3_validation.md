@@ -61,16 +61,24 @@
 
 ## 2. 내부 데이터 (INTERNAL_DATA, 시스템용)
 
-- 질문 리스트와 확률 계산 결과는 **system_instructions에서 지정한 `---INTERNAL_DATA---` 이하에만** JSON 형식으로 포함합니다.
+- 질문 리스트와 확률 계산 결과는 **`---INTERNAL_DATA---` 이하에만** JSON 형식으로 포함합니다.
 - 사용자는 이 INTERNAL_DATA 영역을 보지 않습니다.
-- INTERNAL_DATA 영역에서는 아래와 같은 정보를 제공합니다.
-  - `Questions JSON`: 생성된 질문 리스트 전체 (선택 사항)
-  - `Validated String`: 최종 확정 질환명(또는 `None`)
-  - `Validation JSON`: 각 질환별 확률 정보(JSON 객체)
+- INTERNAL_DATA 영역에서는 아래와 같은 정보를 제공합니다:
 
-예시 (INTERNAL_DATA 영역의 개념적 구조):
-
+**질문 생성 시:**
+```
 ---INTERNAL_DATA---
-Questions JSON: { ...질환별 질문 리스트 JSON... }
-Validated String: Major Depressive Disorder
+Questions JSON: {"questions": [{"id": "q1", "text": "...", "target_diagnosis": "...", "related_criteria": "..."}]}
+```
+
+**평가 결과 시:**
+```
+---INTERNAL_DATA---
+Validated String: [질환명 or None]
 Validation JSON: {"질환A": 0.7, "질환B": 0.4, ...}
+```
+
+# Notes
+- **CRITICAL**: 사용자용 메시지와 INTERNAL_DATA 섹션을 명확히 구분하세요
+- **질문 생성 시 반드시 INTERNAL_DATA 섹션에 Questions JSON을 포함해야 합니다**
+- 사용자 화면에는 자연스러운 안내 문장과 질문만 보여주세요

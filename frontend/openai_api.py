@@ -11,7 +11,7 @@ from .context_handler import get_context
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
 MAX_HISTORY = 10
 
 if not OPENAI_API_KEY:

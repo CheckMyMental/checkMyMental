@@ -38,8 +38,12 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
     # 2. 질환별 심각도 Context 동적 로드 시도 + diseases JSON 내 심각도 척도(severity_scale) 존재 여부 확인
     disease_context = ""
     has_severity_scale = False
+    matched_key = None
+    filename = None
+
     try:
-        disease_key = target_diagnosis.split()[0].lower()  # 첫 단어 사용
+        # 질환명의 모든 단어를 소문자로 변환하여 매칭 시도
+        diagnosis_words = [word.lower() for word in target_diagnosis.split()]
 
         mapping = {
             "depressive": "depression.json",
@@ -49,13 +53,21 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
             "schizophrenia": "schizophrenia.json",
             "adhd": "adhd.json",
             "ocd": "ocd.json",
-            "panic": "anxiety.json",  # 예시
+            "panic": "anxiety.json",
             "substance": "substance.json",
         }
 
-        filename = mapping.get(disease_key)
+        # 모든 단어에 대해 매핑 테이블과 비교
+        for word in diagnosis_words:
+            if word in mapping:
+                filename = mapping[word]
+                matched_key = word
+                break
+
+        # 매칭되지 않으면 첫 단어로 시도
         if not filename:
-            filename = f"{disease_key}.json"
+            matched_key = diagnosis_words[0] if diagnosis_words else "unknown"
+            filename = f"{matched_key}.json"
 
         loaded_context = load_context_from_file(f"diseases/{filename}")
         if loaded_context:
@@ -93,7 +105,7 @@ def severity_node(state: CounselingState) -> Dict[str, Any]:
         )
         print(
             f"[Severity Debug] severity_scale 없음 → 심각도 단계 스킵: "
-            f"disease_key={disease_key}, filename={filename}"
+            f"matched_key={matched_key}, filename={filename}"
         )
         return {
             "messages": [AIMessage(content=skip_msg)],
@@ -198,13 +210,20 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
             conversation_history=None,
         )
 
+        print(f"[Severity Debug] LLM 응답 길이: {len(response_text)}")
+        print(f"[Severity Debug] LLM 응답 처음 500자:\n{response_text[:500]}")
+
         internal_data = ""
         if "---INTERNAL_DATA---" in response_text:
             parts = response_text.split("---INTERNAL_DATA---", 1)
             internal_data = parts[1].strip()
+            print(f"[Severity Debug] INTERNAL_DATA 추출 성공, 길이: {len(internal_data)}")
+        else:
+            print("[Severity Debug] 응답에 ---INTERNAL_DATA--- 섹션이 없습니다.")
 
         questions: List[Dict[str, Any]] = []
         if "Questions JSON:" in internal_data:
+            print("[Severity Debug] Questions JSON: 발견됨, 파싱 시작")
             try:
                 # INTERNAL_DATA 안에서 "Questions JSON:" 뒤에 나오는
                 # 가장 바깥 { ... } 블록을 중괄호 깊이 계산으로 안전하게 추출
@@ -212,11 +231,13 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
                     "Questions JSON:"
                 )
                 substring = internal_data[start_pos:]
+                print(f"[Severity Debug] Questions JSON 뒤 부분 (앞 200자): {substring[:200]}")
 
                 # 코드블록이 있다면 먼저 건너뛰기 (```로 시작하는 경우)
                 code_fence_index = substring.find("```")
                 if code_fence_index != -1 and code_fence_index < substring.find("{"):
                     substring = substring[code_fence_index + 3 :]
+                    print("[Severity Debug] 코드 펜스 건너뜀")
 
                 brace_start = substring.find("{")
                 if brace_start == -1:
@@ -224,6 +245,7 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
                         "[Severity Debug] Questions JSON 뒤에서 여는 중괄호를 찾지 못했습니다."
                     )
                 else:
+                    print(f"[Severity Debug] 여는 중괄호 위치: {brace_start}")
                     depth = 0
                     end_idx: Optional[int] = None
                     for i, ch in enumerate(substring[brace_start:]):
@@ -240,22 +262,33 @@ Questions JSON: {{"questions": [{{"id": "s1", "text": "...", "related_symptom": 
                         )
                     else:
                         q_str = substring[brace_start : end_idx + 1].strip()
+                        print(f"[Severity Debug] 추출된 JSON 문자열 길이: {len(q_str)}")
+                        print(f"[Severity Debug] 추출된 JSON (앞 300자): {q_str[:300]}")
+
                         # 혹시 뒤에 ```가 붙어 있다면 제거
                         if q_str.endswith("```"):
                             q_str = q_str.rsplit("```", 1)[0].strip()
+                            print("[Severity Debug] 뒤 코드 펜스 제거함")
 
                         questions_json = json.loads(q_str)
+                        print(f"[Severity Debug] JSON 파싱 성공, type: {type(questions_json)}")
+
                         if isinstance(questions_json, dict) and isinstance(
                             questions_json.get("questions"), list
                         ):
                             questions = questions_json["questions"]
+                            print(f"[Severity Debug] questions 리스트 추출 성공, 길이: {len(questions)}")
                         else:
                             print(
                                 "[Severity Debug] Questions JSON 구조가 예상과 다릅니다: "
-                                f"type={type(questions_json)}"
+                                f"type={type(questions_json)}, keys={questions_json.keys() if isinstance(questions_json, dict) else 'N/A'}"
                             )
             except Exception as e:
-                print(f"Severity Questions JSON 파싱 오류: {e}")
+                print(f"[Severity Debug] Questions JSON 파싱 오류: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[Severity Debug] INTERNAL_DATA에 'Questions JSON:' 문자열 없음")
 
         if not questions:
             return {
